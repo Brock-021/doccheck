@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}上传检查 - DocCheck{% endblock %}
+{% block page_title %}📄 上传文档检查{% endblock %}
+
+{% block content %}
+<form method="post" action="/api/documents/upload" enctype="multipart/form-data" id="uploadForm">
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+    <div class="form-group">
+      <label for="doc_type_id">文档类型</label>
+      <select id="doc_type_id" name="doc_type_id" required>
+        <option value="">— 请选择文档类型 —</option>
+        {% for dt in doc_types %}
+        <option value="{{ dt.id }}">{{ dt.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="stage">检查阶段</label>
+      <select id="stage" name="stage">
+        <option value="initial">初检</option>
+        <option value="final">终检</option>
+        <option value="all">通用</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>上传文件（仅支持 .docx）</label>
+    <div class="drop-zone" id="dropZone">
+      <p>📁 拖拽文件到此处，或点击选择文件</p>
+      <p style="font-size: 0.75rem; margin-top: 0.5rem; color: #94a3b8;">最大 50MB</p>
+      <input type="file" id="fileInput" name="file" accept=".docx" style="display: none;">
+    </div>
+    <div id="fileInfo" style="display: none; margin-top: 0.5rem; padding: 0.5rem; background: #f0fdf4; border-radius: 4px; font-size: 0.875rem;"></div>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary" id="submitBtn">🚀 开始检查</button>
+  </div>
+</form>
+
+<div id="resultArea" style="display: none; margin-top: 2rem;">
+  <div class="loading">
+    <div class="spinner"></div>
+    <p>AI 检查进行中，请稍候...</p>
+  </div>
+</div>
+
+<script>
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileInfo = document.getElementById('fileInfo');
+const submitBtn = document.getElementById('submitBtn');
+const uploadForm = document.getElementById('uploadForm');
+const resultArea = document.getElementById('resultArea');
+
+// Click to select
+dropZone.addEventListener('click', () => fileInput.click());
+
+// Drag & drop
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone.classList.add('dragover');
+});
+
+dropZone.addEventListener('dragleave', () => {
+  dropZone.classList.remove('dragover');
+});
+
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length > 0) {
+    fileInput.files = e.dataTransfer.files;
+    showFileInfo(fileInput.files[0]);
+  }
+});
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length > 0) {
+    showFileInfo(fileInput.files[0]);
+  }
+});
+
+function showFileInfo(file) {
+  const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+  fileInfo.style.display = 'block';
+  fileInfo.innerHTML = `✅ 已选择: <strong>${file.name}</strong> (${sizeMB}MB)`;
+
+  if (file.size > 50 * 1024 * 1024) {
+    fileInfo.innerHTML += '<br><span style="color: #dc2626;">⚠️ 文件超过 50MB 限制</span>';
+  }
+  if (!file.name.toLowerCase().endsWith('.docx')) {
+    fileInfo.innerHTML += '<br><span style="color: #dc2626;">⚠️ 仅支持 .docx 格式</span>';
+  }
+}
+
+uploadForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const formData = new FormData(uploadForm);
+  const file = fileInput.files[0];
+
+  if (!file) {
+    alert('请先选择文件');
+    return;
+  }
+  if (!formData.get('doc_type_id')) {
+    alert('请选择文档类型');
+    return;
+  }
+  if (!file.name.toLowerCase().endsWith('.docx')) {
+    alert('仅支持 .docx 格式');
+    return;
+  }
+  if (file.size > 50 * 1024 * 1024) {
+    alert('文件大小不能超过 50MB');
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = '⏳ 上传中...';
+  resultArea.style.display = 'block';
+
+  try {
+    const resp = await fetch('/api/documents/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const data = await resp.json();
+
+    if (resp.ok) {
+      resultArea.innerHTML = `
+        <div class="alert alert-success">
+          ✅ 上传成功！文档已进入 AI 检查队列
+        </div>
+        <p>检查任务 ID: ${data.check_task_id}</p>
+        <div class="form-actions">
+          <a href="/reports/${data.report_id || 0}" class="btn btn-primary">查看报告</a>
+          <a href="/documents" class="btn">查看文档列表</a>
+        </div>
+      `;
+
+      // Poll for completion
+      const taskId = data.check_task_id;
+      const pollInterval = setInterval(async () => {
+        const statusResp = await fetch(`/api/documents/check-tasks/${taskId}/status`);
+        const statusData = await statusResp.json();
+        if (statusData.status === 'done') {
+          clearInterval(pollInterval);
+          resultArea.innerHTML += `
+            <div class="alert alert-success" style="margin-top: 1rem;">
+              ✅ AI 检查已完成！
+            </div>
+          `;
+        } else if (statusData.status === 'failed') {
+          clearInterval(pollInterval);
+          resultArea.innerHTML += `
+            <div class="alert alert-error" style="margin-top: 1rem;">
+              ❌ 检查失败: ${statusData.error_message || '未知错误'}
+            </div>
+          `;
+        }
+      }, 3000);
+    } else {
+      resultArea.innerHTML = `<div class="alert alert-error">❌ ${data.detail || '上传失败'}</div>`;
+    }
+  } catch (err) {
+    resultArea.innerHTML = `<div class="alert alert-error">❌ 网络错误: ${err.message}</div>`;
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = '🚀 开始检查';
+  }
+});
+</script>
+{% endblock %}

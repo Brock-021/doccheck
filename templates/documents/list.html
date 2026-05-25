@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}文档历史 - DocCheck{% endblock %}
+{% block page_title %}📋 文档历史{% endblock %}
+
+{% block content %}
+{% if documents %}
+<table>
+  <thead>
+    <tr>
+      <th>文档名称</th>
+      <th>文档类型</th>
+      <th>上传时间</th>
+      <th>检查次数</th>
+      <th>最近检查</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for doc in documents %}
+    <tr>
+      <td>{{ doc.original_filename or doc.filename }}</td>
+      <td><span class="badge badge-info">{{ doc.doc_type_name or '-' }}</span></td>
+      <td>{{ doc.upload_time }}</td>
+      <td>{{ doc.check_count or 0 }} 次</td>
+      <td>
+        {% if doc.last_check_status == 'done' %}
+        <span class="badge badge-success">已完成</span>
+        {% elif doc.last_check_status == 'running' %}
+        <span class="badge badge-info">检查中</span>
+        {% elif doc.last_check_status == 'failed' %}
+        <span class="badge badge-danger">失败</span>
+        {% else %}
+        <span class="badge badge-neutral">待检查</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="/documents/{{ doc.id }}/history" class="btn btn-sm">查看历史</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>📄 还没有文档记录</p>
+  <a href="/documents/upload" class="btn btn-primary">上传第一份文档</a>
+</div>
+{% endif %}
+{% endblock %}

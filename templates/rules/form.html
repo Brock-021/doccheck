@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{% if rule %}编辑规则{% else %}新增规则{% endif %} - DocCheck{% endblock %}
+{% block page_title %}{% if rule %}✏️ 编辑规则{% else %}➕ 新增规则{% endif %}{% endblock %}
+
+{% block content %}
+<form method="post" action="/api/admin/rules{% if rule %}/{{ rule.id }}{% endif %}"
+      {% if rule %}onsubmit="return updateRule(event)"{% endif %}>
+  <input type="hidden" name="_method" value="{% if rule %}PUT{% else %}POST{% endif %}">
+
+  <div class="form-group">
+    <label for="name">规则名称 *</label>
+    <input type="text" id="name" name="name" required
+           value="{{ rule.name if rule else '' }}" placeholder="如：必须包含投资估算章节">
+  </div>
+
+  <div class="form-group">
+    <label for="doc_type_id">文档类型 *</label>
+    <select id="doc_type_id" name="doc_type_id" required>
+      <option value="">— 请选择 —</option>
+      {% for dt in doc_types %}
+      <option value="{{ dt.id }}" {% if rule and rule.doc_type_id == dt.id %}selected{% endif %}>
+        {{ dt.name }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label for="description">规则描述 *</label>
+    <textarea id="description" name="description" required
+              placeholder="用自然语言描述规则内容，供 AI 判断">{{ rule.description if rule else '' }}</textarea>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+    <div class="form-group">
+      <label for="severity">严重程度</label>
+      <select id="severity" name="severity">
+        <option value="must_fix" {% if rule and rule.severity == 'must_fix' %}selected{% endif %}>🔴 必须改</option>
+        <option value="suggest" {% if rule and rule.severity == 'suggest' %}selected{% endif %}>🟡 建议改</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="stage">适用阶段</label>
+      <select id="stage" name="stage">
+        <option value="all" {% if rule and rule.stage == 'all' %}selected{% endif %}>通用</option>
+        <option value="initial" {% if rule and rule.stage == 'initial' %}selected{% endif %}>初审</option>
+        <option value="final" {% if rule and rule.stage == 'final' %}selected{% endif %}>终审</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="sort_order">排序号</label>
+      <input type="number" id="sort_order" name="sort_order" value="{{ rule.sort_order if rule else 0 }}" min="0">
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>
+      <input type="checkbox" id="is_active" name="is_active"
+             {% if not rule or rule.is_active %}checked{% endif %}>
+      启用此规则
+    </label>
+  </div>
+
+  <div class="form-actions">
+    <a href="/admin/rules" class="btn">取消</a>
+    <button type="submit" class="btn btn-primary">保存</button>
+  </div>
+</form>
+
+<script>
+async function updateRule(event) {
+  event.preventDefault();
+  const form = event.target;
+  const ruleId = {{ rule.id if rule else 0 }};
+  const data = {
+    name: form.name.value,
+    doc_type_id: parseInt(form.doc_type_id.value),
+    description: form.description.value,
+    severity: form.severity.value,
+    stage: form.stage.value,
+    sort_order: parseInt(form.sort_order.value || 0),
+    is_active: form.is_active.checked,
+  };
+
+  const resp = await fetch(`/api/admin/rules/${ruleId}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data),
+  });
+
+  if (resp.ok) {
+    window.location.href = '/admin/rules';
+  } else {
+    const err = await resp.json();
+    alert(err.detail || '保存失败');
+  }
+}
+</script>
+{% endblock %}

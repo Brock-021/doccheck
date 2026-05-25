@@ -24,7 +24,7 @@ except ImportError:
 sys.path.insert(0, '.')
 
 from database import init_db, async_session_factory
-from models import User, DocType, Rule
+from models import User, DocType, Rule, SystemConfig
 from sqlalchemy import select
 
 
@@ -103,6 +103,26 @@ async def seed():
 
         await db.commit()
         print(f"  ✅ 规则: {len(rules_data)} 条")
+
+        # ── LLM 配置（不含 Key，部署后手工配置） ──────
+        llm_configs = {
+            "llm_api_base": "https://api.deepseek.com/v1",
+            "llm_model": "deepseek-chat",
+            "llm_timeout": "120",
+            "llm_max_retries": "3",
+            "llm_temperature": "0.1",
+            "llm_max_tokens": "4096",
+        }
+        for key, value in llm_configs.items():
+            exists = await db.execute(
+                select(SystemConfig).where(SystemConfig.config_key == key)
+            )
+            if not exists.scalar_one_or_none():
+                db.add(SystemConfig(config_key=key, config_value=value))
+
+        await db.commit()
+        print(f"  ✅ LLM 配置: {len(llm_configs)} 项")
+
         print()
         print("=" * 50)
         print("种子数据创建完成！")

@@ -223,6 +223,198 @@ async def dashboard_page(request: Request, db: AsyncSession = Depends(get_db)):
     })
 
 
+# ── Document upload page ──────────────────────────────────────
+
+@app.get("/documents/upload", response_class=HTMLResponse)
+async def document_upload_page(request: Request, db: AsyncSession = Depends(get_db)):
+    """上传检查页面。"""
+    user = request.state.current_user
+    if not user:
+        return RedirectResponse(url="/login")
+    from models import DocType
+    from sqlalchemy import select
+    result = await db.execute(select(DocType).order_by(DocType.sort_order))
+    doc_types = result.scalars().all()
+    return templates.TemplateResponse(request, "documents/upload.html", {
+        "current_user": user,
+        "doc_types": [{"id": t.id, "name": t.name} for t in doc_types],
+    })
+
+
+# ── Document list page ────────────────────────────────────────
+
+@app.get("/documents", response_class=HTMLResponse)
+async def document_list_page(request: Request):
+    """文档历史列表页面。"""
+    user = request.state.current_user
+    if not user:
+        return RedirectResponse(url="/login")
+    return templates.TemplateResponse(request, "documents/list.html", {
+        "current_user": user,
+    })
+
+
+# ── Report detail page ────────────────────────────────────────
+
+@app.get("/reports/{report_id}", response_class=HTMLResponse)
+async def report_detail_page(request: Request, report_id: int, db: AsyncSession = Depends(get_db)):
+    """报告详情页面。"""
+    user = request.state.current_user
+    if not user:
+        return RedirectResponse(url="/login")
+
+    from models import Report, CheckTask, Document, CheckResult, Rule, DocType, User as UserModel
+    from sqlalchemy import select
+
+    result = await db.execute(select(Report).where(Report.id == report_id))
+    report = result.scalar_one_or_none()
+    if not report:
+        return templates.TemplateResponse(request, "base.html", {
+            "current_user": user,
+            "content": "<div class='empty-state'><p>报告不存在</p></div>",
+        }, status_code=404)
+
+    ct_result = await db.execute(select(CheckTask).where(CheckTask.id == report.check_task_id))
+    task = ct_result.scalar_one_or_none()
+
+    doc_result = await db.execute(select(Document).where(Document.id == task.document_id))
+    doc = doc_result.scalar_one_or_none()
+
+    dt_result = await db.execute(select(DocType).where(DocType.id == doc.doc_type_id))
+    dt = dt_result.scalar_one_or_none()
+
+    uploader_result = await db.execute(select(UserModel).where(UserModel.id == doc.user_id))
+    uploader = uploader_result.scalar_one_or_none()
+
+    cr_result = await db.execute(
+        select(CheckResult).where(CheckResult.check_task_id == task.id)
+    )
+    results = cr_result.scalars().all()
+
+    results_data = []
+    for r in results:
+        rule_result = await db.execute(select(Rule).where(Rule.id == r.rule_id))
+        rule = rule_result.scalar_one_or_none()
+        results_data.append({
+            "id": r.id,
+            "rule_name": rule.name if rule else "未知规则",
+            "severity": rule.severity if rule else "must_fix",
+            "compliant": r.compliant,
+            "issue": r.issue,
+            "location": r.location,
+            "original_text": r.original_text,
+            "suggestion": r.suggestion,
+            "review_status": r.review_status,
+            "review_remark": r.review_remark,
+        })
+
+    passed = sum(1 for r in results_data if r["compliant"])
+    failed = sum(1 for r in results_data if not r["compliant"])
+    confirmed = sum(1 for r in results_data if r["review_status"] == "confirmed")
+    rejected = sum(1 for r in results_data if r["review_status"] == "rejected")
+
+    return templates.TemplateResponse(request, "reports/detail.html", {
+        "current_user": user,
+        "report": {
+            "id": report.id,
+            "conclusion": report.conclusion,
+            "conclusion_remark": report.conclusion_remark,
+            "concluded_at": report.concluded_at,
+        },
+        "document": {
+            "filename": doc.original_filename or doc.filename if doc else "未知",
+            "doc_type_name": dt.name if dt else "-",
+            "uploader": uploader.display_name if uploader else "未知",
+            "upload_time": doc.upload_time if doc else None,
+        },
+        "task": {
+            "id": task.id,
+            "stage": task.stage,
+            "rule_count": task.rule_count,
+            "status": task.status,
+            "created_at": task.created_at,
+            "completed_at": task.completed_at,
+        },
+        "results": results_data,
+        "summary": {
+            "total": len(results_data),
+            "passed": passed,
+            "failed": failed,
+            "confirmed": confirmed,
+            "rejected": rejected,
+        },
+    })
+
+
+# ── Admin: Rule management pages ──────────────────────────────
+
+@app.get("/admin/rules", response_class=HTMLResponse)
+async def admin_rules_page(request: Request, db: AsyncSession = Depends(get_db)):
+    """规则管理列表页面。"""
+    user = request.state.current_user
+    if not user or "admin" not in user.get("role", "").split(","):
+        return RedirectResponse(url="/login")
+    from models import DocType
+    from sqlalchemy import select
+    dt_result = await db.execute(select(DocType).order_by(DocType.sort_order))
+    doc_types = dt_result.scalars().all()
+    return templates.TemplateResponse(request, "rules/list.html", {
+        "current_user": user,
+        "doc_types": [{"id": t.id, "name": t.name} for t in doc_types],
+        "rules": [],
+        "active_doc_type": None,
+    })
+
+
+@app.get("/admin/rules/new", response_class=HTMLResponse)
+async def admin_rules_new_page(request: Request, db: AsyncSession = Depends(get_db)):
+    """新增规则页面。"""
+    user = request.state.current_user
+    if not user or "admin" not in user.get("role", "").split(","):
+        return RedirectResponse(url="/login")
+    from models import DocType
+    from sqlalchemy import select
+    dt_result = await db.execute(select(DocType).order_by(DocType.sort_order))
+    doc_types = dt_result.scalars().all()
+    return templates.TemplateResponse(request, "rules/form.html", {
+        "current_user": user,
+        "doc_types": [{"id": t.id, "name": t.name} for t in doc_types],
+        "rule": None,
+        "is_edit": False,
+    })
+
+
+@app.get("/admin/rules/{rule_id}/edit", response_class=HTMLResponse)
+async def admin_rules_edit_page(request: Request, rule_id: int, db: AsyncSession = Depends(get_db)):
+    """编辑规则页面。"""
+    user = request.state.current_user
+    if not user or "admin" not in user.get("role", "").split(","):
+        return RedirectResponse(url="/login")
+    from models import Rule, DocType
+    from sqlalchemy import select
+    r_result = await db.execute(select(Rule).where(Rule.id == rule_id))
+    rule = r_result.scalar_one_or_none()
+    if not rule:
+        return RedirectResponse(url="/admin/rules")
+    dt_result = await db.execute(select(DocType).order_by(DocType.sort_order))
+    doc_types = dt_result.scalars().all()
+    return templates.TemplateResponse(request, "rules/form.html", {
+        "current_user": user,
+        "doc_types": [{"id": t.id, "name": t.name} for t in doc_types],
+        "rule": {
+            "id": rule.id,
+            "name": rule.name,
+            "description": rule.description,
+            "doc_type_id": rule.doc_type_id,
+            "severity": rule.severity,
+            "stage": rule.stage,
+            "sort_order": rule.sort_order,
+            "is_active": rule.is_active,
+        },
+        "is_edit": True,
+    })
+
+
 # ── Include routers ───────────────────────────────────────
 
 from routers import auth, rules, documents, reports, reviews, admin

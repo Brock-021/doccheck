@@ -106,18 +106,30 @@ async def upload_document(
         if cfg:
             llm_config[key] = cfg.config_value
 
-    # Run check asynchronously
+    # Run check asynchronously with a fresh session
     import asyncio
-    asyncio.create_task(run_check(
-        db, task,
-        api_base=str(llm_config["api_base"]),
-        api_key=str(llm_config["api_key"]),
-        model=str(llm_config["model"]),
-        llm_timeout=int(llm_config["timeout"]),
-        llm_retries=int(llm_config["max_retries"]),
-        temperature=float(llm_config["temperature"]),
-        max_tokens=int(llm_config["max_tokens"]),
-    ))
+    from database import async_session_factory
+
+    async def run_check_wrapper():
+        async with async_session_factory() as fresh_db:
+            from models import CheckTask as CT
+            fresh_task_result = await fresh_db.execute(
+                select(CT).where(CT.id == task.id)
+            )
+            fresh_task = fresh_task_result.scalar_one_or_none()
+            if fresh_task:
+                await run_check(
+                    fresh_db, fresh_task,
+                    api_base=str(llm_config["api_base"]),
+                    api_key=str(llm_config["api_key"]),
+                    model=str(llm_config["model"]),
+                    llm_timeout=int(llm_config["timeout"]),
+                    llm_retries=int(llm_config["max_retries"]),
+                    temperature=float(llm_config["temperature"]),
+                    max_tokens=int(llm_config["max_tokens"]),
+                )
+
+    asyncio.create_task(run_check_wrapper())
 
     # Return response
     resp_data = {

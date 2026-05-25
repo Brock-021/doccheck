@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}检查报告 - DocCheck{% endblock %}
+{% block page_title %}📋 检查报告{% endblock %}
+
+{% block content %}
+<!-- 报告头部信息 -->
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <h3 style="margin-bottom: 0.5rem;">{{ document.filename }}</h3>
+      <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; font-size: 0.875rem; color: #64748b;">
+        <span>📁 {{ document.doc_type_name }}</span>
+        <span>👤 {{ document.uploader }}</span>
+        <span>🕐 {{ document.upload_time.strftime('%Y-%m-%d %H:%M') if document.upload_time else '-' }}</span>
+        <span>🔖 {{ {'initial': '初检', 'final': '终检', 'all': '通用'}.get(task.stage, task.stage) }}</span>
+      </div>
+    </div>
+    <div style="text-align: right;">
+      {% if report.conclusion == 'pass' %}
+      <span class="badge badge-success" style="font-size: 1rem; padding: 0.5rem 1rem;">✅ 通过</span>
+      {% elif report.conclusion == 'conditional_pass' %}
+      <span class="badge badge-warning" style="font-size: 1rem; padding: 0.5rem 1rem;">⚠️ 有条件通过</span>
+      {% elif report.conclusion == 'fail' %}
+      <span class="badge badge-danger" style="font-size: 1rem; padding: 0.5rem 1rem;">❌ 不通过</span>
+      {% else %}
+      <span class="badge badge-neutral" style="font-size: 1rem; padding: 0.5rem 1rem;">⏳ 待审核</span>
+      {% endif %}
+    </div>
+  </div>
+  {% if report.conclusion_remark %}
+  <div style="margin-top: 0.75rem; padding: 0.75rem; background: #f8fafc; border-radius: 6px; font-size: 0.875rem;">
+    <strong>审核意见：</strong>{{ report.conclusion_remark }}
+  </div>
+  {% endif %}
+</div>
+
+<!-- 摘要统计 -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+  <div class="card" style="text-align: center;">
+    <div style="font-size: 1.5rem; font-weight: 700; color: #3b82f6;">{{ summary.total }}</div>
+    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">检查项总数</div>
+  </div>
+  <div class="card" style="text-align: center;">
+    <div style="font-size: 1.5rem; font-weight: 700; color: #22c55e;">{{ summary.passed }}</div>
+    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">✅ 通过</div>
+  </div>
+  <div class="card" style="text-align: center;">
+    <div style="font-size: 1.5rem; font-weight: 700; color: #ef4444;">{{ summary.failed }}</div>
+    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">❌ 问题</div>
+  </div>
+  <div class="card" style="text-align: center;">
+    <div style="font-size: 1.5rem; font-weight: 700; color: #a855f7;">{{ summary.confirmed }}</div>
+    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">已确认</div>
+  </div>
+  <div class="card" style="text-align: center;">
+    <div style="font-size: 1.5rem; font-weight: 700; color: #f59e0b;">{{ summary.rejected }}</div>
+    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">已驳回</div>
+  </div>
+</div>
+
+<!-- 检查详情 -->
+{% if results %}
+<h3 style="margin-bottom: 1rem;">检查明细</h3>
+{% for r in results %}
+<div class="card" style="margin-bottom: 0.75rem; border-left: 4px solid {{ '#22c55e' if r.compliant else '#ef4444' }};">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+    <div>
+      <strong>{{ r.rule_name }}</strong>
+      {% if r.severity == 'must_fix' %}
+      <span class="severity-tag severity-must-fix">必须改</span>
+      {% else %}
+      <span class="severity-tag severity-suggest">建议改</span>
+      {% endif %}
+    </div>
+    <div>
+      {% if r.compliant %}
+      <span class="badge badge-success">✅ 通过</span>
+      {% else %}
+      <span class="badge badge-danger">❌ 不通过</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not r.compliant %}
+  <div style="font-size: 0.875rem; color: #475569;">
+    <p><strong>问题描述：</strong>{{ r.issue }}</p>
+    {% if r.location %}
+    <p><strong>位置：</strong>{{ r.location }}</p>
+    {% endif %}
+    {% if r.original_text %}
+    <details style="margin-top: 0.25rem;">
+      <summary style="cursor: pointer; color: #64748b; font-size: 0.8rem;">查看原文</summary>
+      <pre style="margin-top: 0.25rem; padding: 0.5rem; background: #f1f5f9; border-radius: 4px; font-size: 0.8rem; white-space: pre-wrap;">{{ r.original_text }}</pre>
+    </details>
+    {% endif %}
+    {% if r.suggestion %}
+    <p style="margin-top: 0.25rem;"><strong>修改建议：</strong>{{ r.suggestion }}</p>
+    {% endif %}
+  </div>
+
+  <!-- 审核状态 -->
+  <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+    {% if r.review_status == 'pending' %}
+    <span class="badge badge-neutral">待审核</span>
+    {% elif r.review_status == 'confirmed' %}
+    <span class="badge badge-success">已确认</span>
+    {% elif r.review_status == 'rejected' %}
+    <span class="badge badge-danger">已驳回: {{ r.review_remark }}</span>
+    {% elif r.review_status == 'ignored' %}
+    <span class="badge badge-neutral">已忽略: {{ r.review_remark }}</span>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+{% else %}
+<div class="empty-state">
+  <p>暂无检查明细数据</p>
+</div>
+{% endif %}
+
+<div class="form-actions" style="margin-top: 1.5rem;">
+  <a href="/documents/upload" class="btn btn-primary">🔄 上传新文档</a>
+  <a href="/documents" class="btn">📂 返回文档列表</a>
+</div>
+{% endblock %}

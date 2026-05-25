@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}历史对比 - DocCheck{% endblock %}
+{% block page_title %}📊 历史检查对比{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <h3 style="margin-bottom: 0.25rem;">{{ filename }}</h3>
+      <div style="font-size: 0.875rem; color: #64748b;">
+        <span>V1: {{ v1.created_at }}</span>
+        <span style="margin: 0 0.5rem;">→</span>
+        <span>V2: {{ v2.created_at }}</span>
+      </div>
+    </div>
+    <div>
+      <a href="/documents" class="btn btn-sm">📂 返回文档列表</a>
+    </div>
+  </div>
+</div>
+
+<!-- 差异摘要 -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+  <div class="card" style="text-align: center; border-left: 4px solid #22c55e;">
+    <div style="font-size: 1.5rem; font-weight: 700; color: #22c55e;">{{ summary.fixed_issues }}</div>
+    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">✅ 已解决</div>
+  </div>
+  <div class="card" style="text-align: center; border-left: 4px solid #ef4444;">
+    <div style="font-size: 1.5rem; font-weight: 700; color: #ef4444;">{{ summary.new_issues }}</div>
+    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">❌ 新增问题</div>
+  </div>
+  <div class="card" style="text-align: center; border-left: 4px solid #f59e0b;">
+    <div style="font-size: 1.5rem; font-weight: 700; color: #f59e0b;">{{ summary.still_issues }}</div>
+    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">⚠️ 仍存在问题</div>
+  </div>
+  <div class="card" style="text-align: center; border-left: 4px solid #3b82f6;">
+    <div style="font-size: 1.5rem; font-weight: 700; color: #3b82f6;">{{ summary.unchanged_pass }}</div>
+    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">🔵 持续通过</div>
+  </div>
+</div>
+
+<!-- 逐项对比 -->
+<h3 style="margin-bottom: 1rem;">逐项对比 <small style="font-weight: normal; color: #94a3b8;">（共 {{ summary.total }} 项）</small></h3>
+
+{% for r in results %}
+<div class="card" style="margin-bottom: 0.75rem; border-left: 4px solid
+  {% if r.diff_status == 'fixed' %}#22c55e
+  {% elif r.diff_status == 'new_in_v2' %}#ef4444
+  {% elif r.diff_status == 'regression' %}#ef4444
+  {% elif r.diff_status == 'still_issue' %}#f59e0b
+  {% else %}#3b82f6{% endif %};">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+    <div>
+      <strong>{{ r.rule_name }}</strong>
+      {% if r.severity == 'must_fix' %}
+      <span class="severity-tag severity-must-fix">必须改</span>
+      {% else %}
+      <span class="severity-tag severity-suggest">建议改</span>
+      {% endif %}
+    </div>
+    <div>
+      {% if r.diff_status == 'fixed' %}
+      <span class="badge badge-success">✅ 已解决</span>
+      {% elif r.diff_status == 'new_in_v2' or r.diff_status == 'regression' %}
+      <span class="badge badge-danger">❌ 新增问题</span>
+      {% elif r.diff_status == 'still_issue' %}
+      <span class="badge badge-warning">⚠️ 仍存在问题</span>
+      {% elif r.diff_status == 'removed_in_v2' %}
+      <span class="badge badge-neutral">➖ 已移除</span>
+      {% else %}
+      <span class="badge badge-success">🔵 通过</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; font-size: 0.875rem;">
+    <!-- V1 -->
+    <div style="background: #f8fafc; padding: 0.5rem; border-radius: 6px;">
+      <div style="color: #64748b; font-size: 0.75rem; margin-bottom: 0.25rem;">版本1 ({{ v1.created_at }})</div>
+      {% if r.v1_compliant == True %}
+      <span class="badge badge-success">✅ 通过</span>
+      {% elif r.v1_compliant == False %}
+      <span class="badge badge-danger">❌ 不通过</span>
+      {% else %}
+      <span class="badge badge-neutral">—</span>
+      {% endif %}
+      {% if r.v1_issue %}
+      <p style="margin-top: 0.25rem; color: #475569;">{{ r.v1_issue }}</p>
+      {% endif %}
+    </div>
+    <!-- V2 -->
+    <div style="background: #f8fafc; padding: 0.5rem; border-radius: 6px;">
+      <div style="color: #64748b; font-size: 0.75rem; margin-bottom: 0.25rem;">版本2 ({{ v2.created_at }})</div>
+      {% if r.v2_compliant == True %}
+      <span class="badge badge-success">✅ 通过</span>
+      {% elif r.v2_compliant == False %}
+      <span class="badge badge-danger">❌ 不通过</span>
+      {% else %}
+      <span class="badge badge-neutral">—</span>
+      {% endif %}
+      {% if r.v2_issue %}
+      <p style="margin-top: 0.25rem; color: #475569;">{{ r.v2_issue }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if r.suggestion %}
+  <div style="margin-top: 0.5rem; font-size: 0.8rem; color: #64748b;">
+    <strong>建议：</strong>{{ r.suggestion }}
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="empty-state">
+  <p>暂无对比数据</p>
+</div>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block title %}审核报告 - DocCheck{% endblock %}
+{% block page_title %}🔍 审核检查报告{% endblock %}
+
+{% block content %}
+<!-- 报告头部信息 -->
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <h3 style="margin-bottom: 0.5rem;">{{ document.filename }}</h3>
+      <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; font-size: 0.875rem; color: #64748b;">
+        <span>📁 {{ document.doc_type_name }}</span>
+        <span>👤 上传者: {{ document.uploader }}</span>
+        <span>🕐 {{ document.upload_time.strftime('%Y-%m-%d %H:%M') if document.upload_time else '-' }}</span>
+        <span>🔖 {{ {'initial': '初检', 'final': '终检', 'all': '通用'}.get(task.stage, task.stage) }}</span>
+        <span>📋 报告 #{{ report.id }}</span>
+      </div>
+    </div>
+    <!-- 结论状态 -->
+    <div id="conclusionArea">
+      {% if report.conclusion == 'pass' %}
+      <span class="badge badge-success" style="font-size: 1rem; padding: 0.5rem 1rem;">✅ 通过</span>
+      {% elif report.conclusion == 'conditional_pass' %}
+      <span class="badge badge-warning" style="font-size: 1rem; padding: 0.5rem 1rem;">⚠️ 有条件通过</span>
+      {% elif report.conclusion == 'fail' %}
+      <span class="badge badge-danger" style="font-size: 1rem; padding: 0.5rem 1rem;">❌ 不通过</span>
+      {% else %}
+      <span class="badge badge-neutral" style="font-size: 1rem; padding: 0.5rem 1rem;">⏳ 待审核</span>
+      {% endif %}
+    </div>
+  </div>
+  {% if report.conclusion_remark %}
+  <div style="margin-top: 0.75rem; padding: 0.75rem; background: #f8fafc; border-radius: 6px; font-size: 0.875rem;">
+    <strong>审核结论说明：</strong>{{ report.conclusion_remark }}
+  </div>
+  {% endif %}
+</div>
+
+<!-- 摘要统计 -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+  <div class="card" style="text-align: center;">
+    <div style="font-size: 1.5rem; font-weight: 700; color: #3b82f6;">{{ summary.total }}</div>
+    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">检查项</div>
+  </div>
+  <div class="card" style="text-align: center;">
+    <div style="font-size: 1.5rem; font-weight: 700; color: #22c55e;">{{ summary.passed }}</div>
+    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">通过</div>
+  </div>
+  <div class="card" style="text-align: center;">
+    <div style="font-size: 1.5rem; font-weight: 700; color: #ef4444;">{{ summary.failed }}</div>
+    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">问题</div>
+  </div>
+  <div class="card" style="text-align: center;">
+    <div style="font-size: 1.5rem; font-weight: 700; color: #a855f7;">{{ summary.confirmed }}</div>
+    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">已确认</div>
+  </div>
+  <div class="card" style="text-align: center;">
+    <div style="font-size: 1.5rem; font-weight: 700; color: #f59e0b;">{{ summary.rejected }}</div>
+    <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">已驳回</div>
+  </div>
+</div>
+
+<!-- 审核操作按钮 (仅当审核结论未出具时) -->
+{% if not report.conclusion %}
+<div class="card" style="margin-bottom: 1.5rem; background: #f0fdf4; border: 1px solid #bbf7d0;">
+  <h4 style="margin-bottom: 0.75rem;">📝 出具审核结论</h4>
+  <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+    <button class="btn btn-success" onclick="submitConclusion('pass', '')">✅ 通过</button>
+    <button class="btn btn-warning" onclick="showConclusionRemark('conditional_pass')">⚠️ 有条件通过</button>
+    <button class="btn btn-danger" onclick="showConclusionRemark('fail')">❌ 不通过</button>
+  </div>
+</div>
+{% endif %}
+
+<!-- 检查明细列表 -->
+<h3 style="margin-bottom: 1rem;">检查明细 <small style="font-weight: normal; color: #94a3b8;">（点击问题项可操作）</small></h3>
+
+{% if results %}
+{% for r in results %}
+<div class="card" style="margin-bottom: 0.75rem; border-left: 4px solid {{ '#22c55e' if r.compliant == 'true' else '#ef4444' }};">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+    <div>
+      <strong>{{ r.rule_name }}</strong>
+      {% if r.severity == 'must_fix' %}
+      <span class="severity-tag severity-must-fix">必须改</span>
+      {% else %}
+      <span class="severity-tag severity-suggest">建议改</span>
+      {% endif %}
+    </div>
+    <div>
+      {% if r.compliant == 'true' %}
+      <span class="badge badge-success">✅ 通过</span>
+      {% elif r.compliant == 'false' %}
+      <span class="badge badge-danger">❌ 不通过</span>
+      {% else %}
+      <span class="badge badge-neutral">❓ 无法判断</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if r.compliant != 'true' %}
+  <div style="font-size: 0.875rem; color: #475569;">
+    <p><strong>问题描述：</strong>{{ r.issue }}</p>
+    {% if r.location %}
+    <p><strong>位置：</strong>{{ r.location }}</p>
+    {% endif %}
+    {% if r.original_text %}
+    <details style="margin-top: 0.25rem;">
+      <summary style="cursor: pointer; color: #64748b; font-size: 0.8rem;">查看原文</summary>
+      <pre style="margin-top: 0.25rem; padding: 0.5rem; background: #f1f5f9; border-radius: 4px; font-size: 0.8rem; white-space: pre-wrap;">{{ r.original_text }}</pre>
+    </details>
+    {% endif %}
+    {% if r.suggestion %}
+    <p style="margin-top: 0.25rem;"><strong>修改建议：</strong>{{ r.suggestion }}</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- 审核操作区 -->
+  <div class="review-actions" style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #e2e8f0;">
+    <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+      {% if r.review_status == 'pending' %}
+      <span class="badge badge-neutral" style="margin-right: 0.5rem;">待审核</span>
+      <button class="btn btn-sm btn-success" onclick="reviewAction({{ r.id }}, 'confirm')">✅ 确认</button>
+      <button class="btn btn-sm btn-warning" onclick="showReviewRemark({{ r.id }}, 'reject')">✏️ 驳回</button>
+      <button class="btn btn-sm" onclick="showReviewRemark({{ r.id }}, 'ignore')">⏭️ 忽略</button>
+      {% elif r.review_status == 'confirmed' %}
+      <span class="badge badge-success">✅ 已确认</span>
+      {% elif r.review_status == 'rejected' %}
+      <span class="badge badge-danger">✏️ 已驳回</span>
+      {% if r.review_remark %}<span style="font-size: 0.8rem; color: #64748b;">备注: {{ r.review_remark }}</span>{% endif %}
+      {% elif r.review_status == 'ignored' %}
+      <span class="badge badge-neutral">⏭️ 已忽略</span>
+      {% if r.review_remark %}<span style="font-size: 0.8rem; color: #64748b;">备注: {{ r.review_remark }}</span>{% endif %}
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="empty-state">
+  <p>暂无检查明细数据</p>
+</div>
+{% endif %}
+
+<!-- 弹窗遮罩 -->
+<div id="modalOverlay" class="modal-overlay" style="display: none;" onclick="closeModal()"></div>
+<div id="remarkModal" class="modal" style="display: none;">
+  <div class="modal-content">
+    <h4 id="modalTitle">请输入备注</h4>
+    <textarea id="modalRemark" rows="3" style="width: 100%;" placeholder="请说明原因..."></textarea>
+    <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+      <button id="modalConfirmBtn" class="btn btn-primary" onclick="confirmModal()">确定</button>
+      <button class="btn" onclick="closeModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 审核操作 ──────────────────────────────────────────
+let pendingAction = null;
+let pendingResultId = null;
+let pendingConclusion = null;
+
+function reviewAction(resultId, action) {
+  if (action === 'confirm') {
+    fetch(`/api/reviews/${resultId}/confirm`, { method: 'POST' })
+      .then(r => r.json())
+      .then(d => { if (d.message) location.reload(); else alert(d.detail); })
+      .catch(e => alert('网络错误: ' + e.message));
+  } else if (action === 'reject') {
+    pendingResultId = resultId;
+    pendingAction = 'reject';
+    document.getElementById('modalTitle').textContent = '✏️ 驳回原因';
+    document.getElementById('modalRemark').value = '';
+    document.getElementById('modalConfirmBtn').textContent = '确认驳回';
+    document.getElementById('remarkModal').style.display = 'block';
+    document.getElementById('modalOverlay').style.display = 'block';
+  } else if (action === 'ignore') {
+    pendingResultId = resultId;
+    pendingAction = 'ignore';
+    document.getElementById('modalTitle').textContent = '⏭️ 忽略原因';
+    document.getElementById('modalRemark').value = '';
+    document.getElementById('modalConfirmBtn').textContent = '确认忽略';
+    document.getElementById('remarkModal').style.display = 'block';
+    document.getElementById('modalOverlay').style.display = 'block';
+  }
+}
+
+function showReviewRemark(resultId, action) {
+  reviewAction(resultId, action);
+}
+
+function confirmModal() {
+  const remark = document.getElementById('modalRemark').value.trim();
+  if (!remark) {
+    alert('请输入备注说明');
+    return;
+  }
+
+  if (pendingAction === 'reject') {
+    fetch(`/api/reviews/${pendingResultId}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ remark: remark }),
+    })
+      .then(r => r.json())
+      .then(d => { if (d.message) location.reload(); else alert(d.detail); })
+      .catch(e => alert('网络错误: ' + e.message));
+  } else if (pendingAction === 'ignore') {
+    fetch(`/api/reviews/${pendingResultId}/ignore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ remark: remark }),
+    })
+      .then(r => r.json())
+      .then(d => { if (d.message) location.reload(); else alert(d.detail); })
+      .catch(e => alert('网络错误: ' + e.message));
+  }
+  closeModal();
+}
+
+function closeModal() {
+  document.getElementById('remarkModal').style.display = 'none';
+  document.getElementById('modalOverlay').style.display = 'none';
+  pendingAction = null;
+  pendingResultId = null;
+}
+
+// ── 审核结论 ──────────────────────────────────────────
+function showConclusionRemark(conclusion) {
+  pendingConclusion = conclusion;
+  const labels = {
+    'pass': '通过',
+    'conditional_pass': '有条件通过',
+    'fail': '不通过',
+  };
+  document.getElementById('modalTitle').textContent = `📝 结论: ${labels[conclusion]}`;
+  if (conclusion === 'pass') {
+    document.getElementById('modalRemark').value = '所有问题项已处理，文档检查通过。';
+  } else {
+    document.getElementById('modalRemark').value = '';
+  }
+  document.getElementById('modalConfirmBtn').textContent = '提交结论';
+  document.getElementById('remarkModal').style.display = 'block';
+  document.getElementById('modalOverlay').style.display = 'block';
+}
+
+function submitConclusion(conclusion, remark) {
+  if (conclusion === 'pass') {
+    fetch(`/api/reviews/{{ report.id }}/conclusion`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conclusion: 'pass', remark: '' }),
+    })
+      .then(r => r.json())
+      .then(d => { if (d.message) location.reload(); else alert(d.detail); })
+      .catch(e => alert('网络错误: ' + e.message));
+  }
+}
+
+// Override confirmModal for conclusion
+const origConfirm = confirmModal;
+confirmModal = function() {
+  if (pendingConclusion) {
+    const remark = document.getElementById('modalRemark').value.trim();
+    fetch(`/api/reviews/{{ report.id }}/conclusion`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conclusion: pendingConclusion, remark: remark }),
+    })
+      .then(r => r.json())
+      .then(d => { if (d.message) location.reload(); else alert(d.detail); })
+      .catch(e => alert('网络错误: ' + e.message));
+    closeModal();
+    pendingConclusion = null;
+  } else {
+    origConfirm();
+  }
+};
+</script>
+
+<div class="form-actions" style="margin-top: 1.5rem;">
+  <a href="/reports/{{ report.id }}" class="btn">📋 查看报告</a>
+  <a href="/api/reports/{{ report.id }}/export/docx" class="btn" target="_blank">📄 导出 Word</a>
+  <a href="/api/reports/{{ report.id }}/export/pdf" class="btn" target="_blank">📕 导出 PDF</a>
+  <a href="/documents" class="btn">📂 文档列表</a>
+</div>
+{% endblock %}

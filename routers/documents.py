@@ -215,6 +215,129 @@ async def get_document(doc_id: int, db: AsyncSession = Depends(get_db)):
     }
 
 
+@router.get("/{doc_id}/compare")
+async def compare_checks(
+    doc_id: int,
+    v1: int = Query(..., description="第一个检查任务ID"),
+    v2: int = Query(..., description="第二个检查任务ID"),
+    db: AsyncSession = Depends(get_db),
+):
+    """比较同一文档的两次检查结果差异。"""
+    # Verify doc exists
+    doc_result = await db.execute(select(Document).where(Document.id == doc_id))
+    doc = doc_result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+
+    # Load task v1
+    t1_result = await db.execute(select(CheckTask).where(CheckTask.id == v1))
+    t1 = t1_result.scalar_one_or_none()
+    if not t1:
+        raise HTTPException(status_code=404, detail=f"检查任务 {v1} 不存在")
+
+    # Load task v2
+    t2_result = await db.execute(select(CheckTask).where(CheckTask.id == v2))
+    t2 = t2_result.scalar_one_or_none()
+    if not t2:
+        raise HTTPException(status_code=404, detail=f"检查任务 {v2} 不存在")
+
+    # Get results for both
+    r1_result = await db.execute(
+        select(CheckResult).where(CheckResult.check_task_id == v1)
+    )
+    r1_list = r1_result.scalars().all()
+
+    r2_result = await db.execute(
+        select(CheckResult).where(CheckResult.check_task_id == v2)
+    )
+    r2_list = r2_result.scalars().all()
+
+    # Build rule maps
+    async def _get_rule_map(results_list):
+        rule_map = {}
+        for r in results_list:
+            rule_r = await db.execute(select(Rule).where(Rule.id == r.rule_id))
+            rule = rule_r.scalar_one_or_none()
+            rule_name = rule.name if rule else f"规则#{r.rule_id}"
+            rule_map[rule_name] = {
+                "id": r.id,
+                "compliant": r.compliant,
+                "issue": r.issue,
+                "suggestion": r.suggestion,
+                "review_status": r.review_status,
+                "rule_name": rule_name,
+                "severity": rule.severity if rule else "suggest",
+            }
+        return rule_map
+
+    v1_map = await _get_rule_map(r1_list)
+    v2_map = await _get_rule_map(r2_list)
+
+    # Compute diff
+    all_rules = sorted(set(list(v1_map.keys()) + list(v2_map.keys())))
+
+    diff_results = []
+    new_issues = 0
+    fixed_issues = 0
+    still_issues = 0
+    unchanged_pass = 0
+
+    for rule_name in all_rules:
+        v1_data = v1_map.get(rule_name)
+        v2_data = v2_map.get(rule_name)
+
+        v1_ok = v1_data["compliant"] == "true" if v1_data else None
+        v2_ok = v2_data["compliant"] == "true" if v2_data else None
+
+        if v1_ok is None and v2_ok is not None:
+            status = "new_in_v2"
+            new_issues += 1 if not v2_ok else 0
+        elif v2_ok is None and v1_ok is not None:
+            status = "removed_in_v2"
+            fixed_issues += 1 if not v1_ok else 0
+        elif v1_ok and not v2_ok:
+            status = "regression"
+            new_issues += 1
+        elif not v1_ok and v2_ok:
+            status = "fixed"
+            fixed_issues += 1
+        elif not v1_ok and not v2_ok:
+            status = "still_issue"
+            still_issues += 1
+        else:
+            status = "ok"
+            unchanged_pass += 1
+
+        data = (v2_data or v1_data).copy() if (v2_data or v1_data) else {}
+        data["diff_status"] = status
+        data["v1_compliant"] = v1_ok
+        data["v2_compliant"] = v2_ok
+        data["v1_issue"] = v1_data["issue"] if v1_data else ""
+        data["v2_issue"] = v2_data["issue"] if v2_data else ""
+        diff_results.append(data)
+
+    # Get reports for both tasks
+    rp1_result = await db.execute(select(Report).where(Report.check_task_id == v1))
+    rp1 = rp1_result.scalar_one_or_none()
+    rp2_result = await db.execute(select(Report).where(Report.check_task_id == v2))
+    rp2 = rp2_result.scalar_one_or_none()
+
+    return {
+        "document_id": doc_id,
+        "filename": doc.original_filename or doc.filename,
+        "v1": {"task_id": v1, "created_at": t1.created_at.isoformat() if t1.created_at else None, "report_id": rp1.id if rp1 else None},
+        "v2": {"task_id": v2, "created_at": t2.created_at.isoformat() if t2.created_at else None, "report_id": rp2.id if rp2 else None},
+        "summary": {
+            "new_issues": new_issues,
+            "fixed_issues": fixed_issues,
+            "still_issues": still_issues,
+            "unchanged_pass": unchanged_pass,
+            "total": len(diff_results),
+        },
+        "results": diff_results,
+    }
+
+
 @router.get("/{doc_id}/history")
 async def get_document_history(doc_id: int, db: AsyncSession = Depends(get_db)):
     """获取某文档的历史检查记录。"""

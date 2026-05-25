@@ -9,7 +9,7 @@ import logging
 from datetime import datetime
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 import jinja2
@@ -381,6 +381,140 @@ async def admin_rules_new_page(request: Request, db: AsyncSession = Depends(get_
         "doc_types": [{"id": t.id, "name": t.name} for t in doc_types],
         "rule": None,
         "is_edit": False,
+    })
+
+
+# ── Review page ─────────────────────────────────────────────
+
+@app.get("/reviews/{report_id}", response_class=HTMLResponse)
+async def review_page(request: Request, report_id: int, db: AsyncSession = Depends(get_db)):
+    """审核页面。"""
+    user = request.state.current_user
+    if not user:
+        return RedirectResponse(url="/login")
+    user_roles = user.get("role", "").split(",")
+    if "admin" not in user_roles and "reviewer" not in user_roles:
+        return RedirectResponse(url="/")
+
+    from models import Report, CheckTask, Document, CheckResult, Rule, DocType, User as UserModel
+    from sqlalchemy import select
+
+    result = await db.execute(select(Report).where(Report.id == report_id))
+    report = result.scalar_one_or_none()
+    if not report:
+        return HTMLResponse("报告不存在", status_code=404)
+
+    ct_result = await db.execute(select(CheckTask).where(CheckTask.id == report.check_task_id))
+    task = ct_result.scalar_one_or_none()
+
+    doc_result = await db.execute(select(Document).where(Document.id == task.document_id))
+    doc = doc_result.scalar_one_or_none()
+
+    dt_result = await db.execute(select(DocType).where(DocType.id == doc.doc_type_id))
+    dt = dt_result.scalar_one_or_none()
+
+    uploader_result = await db.execute(select(UserModel).where(UserModel.id == doc.user_id))
+    uploader = uploader_result.scalar_one_or_none()
+
+    cr_result = await db.execute(
+        select(CheckResult).where(CheckResult.check_task_id == task.id)
+    )
+    results = cr_result.scalars().all()
+
+    results_data = []
+    for r in results:
+        rule_result = await db.execute(select(Rule).where(Rule.id == r.rule_id))
+        rule = rule_result.scalar_one_or_none()
+        results_data.append({
+            "id": r.id,
+            "rule_name": rule.name if rule else "未知规则",
+            "severity": rule.severity if rule else "must_fix",
+            "compliant": r.compliant,
+            "issue": r.issue,
+            "location": r.location,
+            "original_text": r.original_text,
+            "suggestion": r.suggestion,
+            "review_status": r.review_status,
+            "review_remark": r.review_remark,
+        })
+
+    passed = sum(1 for r in results_data if r["compliant"] == "true")
+    failed = sum(1 for r in results_data if r["compliant"] != "true")
+    confirmed = sum(1 for r in results_data if r["review_status"] == "confirmed")
+    rejected = sum(1 for r in results_data if r["review_status"] == "rejected")
+
+    return templates.TemplateResponse(request, "reviews/review.html", {
+        "current_user": user,
+        "report": {
+            "id": report.id,
+            "conclusion": report.conclusion,
+            "conclusion_remark": report.conclusion_remark,
+            "concluded_at": report.concluded_at,
+        },
+        "document": {
+            "filename": doc.original_filename or doc.filename if doc else "未知",
+            "doc_type_name": dt.name if dt else "-",
+            "uploader": uploader.display_name if uploader else "未知",
+            "upload_time": doc.upload_time if doc else None,
+        },
+        "task": {
+            "id": task.id,
+            "stage": task.stage,
+            "rule_count": task.rule_count,
+            "status": task.status,
+            "created_at": task.created_at,
+            "completed_at": task.completed_at,
+        },
+        "summary": {
+            "total": len(results_data),
+            "passed": passed,
+            "failed": failed,
+            "confirmed": confirmed,
+            "rejected": rejected,
+        },
+        "results": results_data,
+    })
+
+
+# ── Document compare page ──────────────────────────────────
+
+@app.get("/documents/{doc_id}/compare", response_class=HTMLResponse)
+async def document_compare_page(
+    request: Request,
+    doc_id: int,
+    v1: int = Query(...),
+    v2: int = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """历史检查对比页面。"""
+    user = request.state.current_user
+    if not user:
+        return RedirectResponse(url="/login")
+
+    import httpx
+    session_id = request.cookies.get("session", "")
+    api_url = f"http://127.0.0.1:8001/api/documents/{doc_id}/compare?v1={v1}&v2={v2}"
+    try:
+        resp = httpx.get(api_url, cookies={"session": session_id}, timeout=10)
+        data = resp.json()
+    except Exception as e:
+        return templates.TemplateResponse(request, "documents/compare.html", {
+            "current_user": user,
+            "error": str(e),
+            "filename": "加载失败",
+            "v1": {"created_at": ""},
+            "v2": {"created_at": ""},
+            "summary": {"fixed_issues": 0, "new_issues": 0, "still_issues": 0, "unchanged_pass": 0, "total": 0},
+            "results": [],
+        })
+
+    return templates.TemplateResponse(request, "documents/compare.html", {
+        "current_user": user,
+        "filename": data.get("filename", "未知"),
+        "v1": data.get("v1", {}),
+        "v2": data.get("v2", {}),
+        "summary": data.get("summary", {}),
+        "results": data.get("results", []),
     })
 
 

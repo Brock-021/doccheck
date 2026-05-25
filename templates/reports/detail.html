@@ -120,6 +120,9 @@
 {% endif %}
 
 <div class="form-actions" style="margin-top: 1.5rem;">
+  <a href="/reviews/{{ report.id }}" class="btn btn-warning">🔍 审核操作</a>
+  <a href="/api/reports/{{ report.id }}/export/docx" class="btn" target="_blank">📄 导出 Word</a>
+  <a href="/api/reports/{{ report.id }}/export/pdf" class="btn" target="_blank">📕 导出 PDF</a>
   <a href="/documents/upload" class="btn btn-primary">🔄 上传新文档</a>
   <a href="/documents" class="btn">📂 返回文档列表</a>
 </div>

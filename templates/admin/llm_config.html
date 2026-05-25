@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}LLM 配置 - DocCheck{% endblock %}
+{% block page_title %}⚙️ LLM 模型配置{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 640px;">
+  <h4 style="margin-bottom: 1rem;">AI 检查模型设置</h4>
+  <p style="font-size: 0.875rem; color: #64748b; margin-bottom: 1.5rem;">
+    配置用于文档检查的大模型 API。支持所有兼容 OpenAI 格式的接口（如 DeepSeek、通义千问、OpenAI 等）。
+  </p>
+
+  <div class="form-group">
+    <label for="api_base">API 地址</label>
+    <input type="text" id="api_base" class="form-control" placeholder="https://api.example.com/v1">
+  </div>
+
+  <div class="form-group">
+    <label for="api_key">API Key</label>
+    <input type="password" id="api_key" class="form-control" placeholder="sk-...">
+  </div>
+
+  <div class="form-group">
+    <label for="model">模型名称</label>
+    <input type="text" id="model" class="form-control" placeholder="deepseek-chat / qwen-max / gpt-4o-mini">
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+    <div class="form-group">
+      <label for="timeout">超时时间（秒）</label>
+      <input type="number" id="timeout" class="form-control" value="60" min="10" max="300">
+    </div>
+    <div class="form-group">
+      <label for="max_retries">最大重试次数</label>
+      <input type="number" id="max_retries" class="form-control" value="3" min="0" max="10">
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+    <div class="form-group">
+      <label for="temperature">温度（Temperature）</label>
+      <input type="number" id="temperature" class="form-control" value="0.1" min="0" max="2" step="0.1">
+    </div>
+    <div class="form-group">
+      <label for="max_tokens">最大 Token 数</label>
+      <input type="number" id="max_tokens" class="form-control" value="4096" min="512" max="65536" step="512">
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+    <button class="btn btn-primary" onclick="saveConfig()">💾 保存配置</button>
+    <button class="btn" onclick="testConnection()">🔌 测试连接</button>
+  </div>
+
+  <div id="resultArea" style="margin-top: 1rem; display: none;"></div>
+</div>
+
+<script>
+let savedConfig = {};
+
+async function loadConfig() {
+  try {
+    const resp = await fetch('/api/admin/config/llm');
+    const cfg = await resp.json();
+    savedConfig = cfg;
+    document.getElementById('api_base').value = cfg.api_base || '';
+    document.getElementById('api_key').value = cfg.api_key || '';
+    document.getElementById('model').value = cfg.model || '';
+    document.getElementById('timeout').value = cfg.timeout || 60;
+    document.getElementById('max_retries').value = cfg.max_retries || 3;
+    document.getElementById('temperature').value = cfg.temperature || 0.1;
+    document.getElementById('max_tokens').value = cfg.max_tokens || 4096;
+
+    if (cfg.api_base) showResult('info', '✅ 已加载现有配置');
+  } catch (e) {
+    showResult('error', '加载配置失败: ' + e.message);
+  }
+}
+
+function showResult(type, msg) {
+  const area = document.getElementById('resultArea');
+  area.style.display = 'block';
+  const cls = type === 'error' ? 'alert alert-error' : type === 'success' ? 'alert alert-success' : 'alert alert-info';
+  area.innerHTML = `<div class="${cls}">${msg}</div>`;
+}
+
+async function saveConfig() {
+  const data = {
+    api_base: document.getElementById('api_base').value.trim(),
+    api_key: document.getElementById('api_key').value.trim(),
+    model: document.getElementById('model').value.trim(),
+    timeout: parseInt(document.getElementById('timeout').value) || 60,
+    max_retries: parseInt(document.getElementById('max_retries').value) || 3,
+    temperature: parseFloat(document.getElementById('temperature').value) || 0.1,
+    max_tokens: parseInt(document.getElementById('max_tokens').value) || 4096,
+  };
+  if (!data.api_base) { showResult('error', '请输入 API 地址'); return; }
+  if (!data.api_key) { showResult('error', '请输入 API Key'); return; }
+
+  try {
+    const resp = await fetch('/api/admin/config/llm', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+    });
+    if (resp.ok) {
+      showResult('success', '✅ 配置已保存');
+      savedConfig = data;
+    } else {
+      const err = await resp.json();
+      showResult('error', '保存失败: ' + (err.detail || ''));
+    }
+  } catch (e) {
+    showResult('error', '网络错误: ' + e.message);
+  }
+}
+
+async function testConnection() {
+  showResult('info', '⏳ 正在测试连接...');
+  try {
+    const resp = await fetch('/api/admin/config/llm/test', {method: 'POST'});
+    const data = await resp.json();
+    if (data.success) {
+      let msg = '✅ 连接成功！';
+      if (data.models && data.models.length > 0) {
+        msg += `<br>可用模型: ${data.models.slice(0, 5).join(', ')}`;
+      }
+      showResult('success', msg);
+    } else {
+      showResult('error', '❌ ' + data.message);
+    }
+  } catch (e) {
+    showResult('error', '❌ 测试失败: ' + e.message);
+  }
+}
+
+loadConfig();
+</script>
+{% endblock %}

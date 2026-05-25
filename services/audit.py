@@ -52,7 +52,7 @@ async def get_audit_logs(
         query = query.where(AuditLog.created_at <= end)
 
     # Count
-    count_query = select(type(AuditLog.id)).select_from(AuditLog)
+    count_query = select(AuditLog.id)
     if action:
         count_query = count_query.where(AuditLog.action == action)
     if start:

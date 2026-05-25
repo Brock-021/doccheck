@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}用户管理 - DocCheck{% endblock %}
+{% block page_title %}👥 用户管理{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+  <div></div>
+  <button class="btn btn-primary btn-sm" onclick="showAddUser()">➕ 新增用户</button>
+</div>
+
+<table id="userTable">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>用户名</th>
+      <th>姓名</th>
+      <th>角色</th>
+      <th>状态</th>
+      <th>创建时间</th>
+      <th>最后登录</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody id="userTableBody">
+    <tr><td colspan="8" style="text-align: center; color: #94a3b8;">加载中...</td></tr>
+  </tbody>
+</table>
+
+<div id="modalOverlay" class="modal-overlay" style="display: none;" onclick="closeUserModal()"></div>
+<div id="userModal" class="modal" style="display: none;">
+  <div class="modal-content">
+    <h4 id="userModalTitle">新增用户</h4>
+    <input type="hidden" id="editUserId" value="">
+    <div class="form-group">
+      <label>用户名</label>
+      <input type="text" id="formUsername" class="form-control" placeholder="登录用账号">
+    </div>
+    <div class="form-group">
+      <label>姓名</label>
+      <input type="text" id="formDisplayName" class="form-control" placeholder="显示名称">
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input type="password" id="formPassword" class="form-control" placeholder="留空则不修改">
+    </div>
+    <div class="form-group">
+      <label>角色</label>
+      <select id="formRole" class="form-control">
+        <option value="user">普通用户（文档编写者）</option>
+        <option value="reviewer">审核员</option>
+        <option value="admin">管理员</option>
+      </select>
+    </div>
+    <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+      <button id="modalSaveBtn" class="btn btn-primary" onclick="saveUser()">保存</button>
+      <button class="btn" onclick="closeUserModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+{% raw %}
+<script>
+async function loadUsers() {
+  try {
+    const resp = await fetch('/api/admin/users');
+    const users = await resp.json();
+    const tbody = document.getElementById('userTableBody');
+    tbody.innerHTML = users.map(u => {
+      const roleLabels = {admin: '管理员', reviewer: '审核员', user: '普通用户'};
+      const roleBadge = u.role === 'admin' ? 'badge-danger' : u.role === 'reviewer' ? 'badge-warning' : 'badge-neutral';
+      return `<tr>
+        <td>${u.id}</td>
+        <td>${u.username}</td>
+        <td>${u.display_name || '-'}</td>
+        <td><span class="badge ${roleBadge}">${roleLabels[u.role] || u.role}</span></td>
+        <td>${u.is_active ? '<span class="badge badge-success">启用</span>' : '<span class="badge badge-neutral">禁用</span>'}</td>
+        <td>${u.created_at ? new Date(u.created_at).toLocaleString('zh-CN') : '-'}</td>
+        <td>${u.last_login ? new Date(u.last_login).toLocaleString('zh-CN') : '从未登录'}</td>
+        <td>
+          <button class="btn btn-sm" onclick="editUser(${u.id},'${u.username}','${u.display_name || ''}','${u.role}')">编辑</button>
+          <button class="btn btn-sm" onclick="toggleUser(${u.id})">${u.is_active ? '禁用' : '启用'}</button>
+          <button class="btn btn-sm btn-warning" onclick="showResetPwd(${u.id})">重置密码</button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('userTableBody').innerHTML = `<tr><td colspan="8" style="text-align: center; color: #ef4444;">加载失败: ${e.message}</td></tr>`;
+  }
+}
+
+function showAddUser() {
+  document.getElementById('userModalTitle').textContent = '新增用户';
+  document.getElementById('editUserId').value = '';
+  document.getElementById('formUsername').value = '';
+  document.getElementById('formDisplayName').value = '';
+  document.getElementById('formPassword').value = '';
+  document.getElementById('formPassword').placeholder = '必填';
+  document.getElementById('formRole').value = 'user';
+  document.getElementById('userModal').style.display = 'block';
+  document.getElementById('modalOverlay').style.display = 'block';
+}
+
+function editUser(id, username, displayName, role) {
+  document.getElementById('userModalTitle').textContent = '编辑用户';
+  document.getElementById('editUserId').value = id;
+  document.getElementById('formUsername').value = username;
+  document.getElementById('formUsername').disabled = true;
+  document.getElementById('formDisplayName').value = displayName;
+  document.getElementById('formPassword').value = '';
+  document.getElementById('formPassword').placeholder = '留空则不修改';
+  document.getElementById('formRole').value = role;
+  document.getElementById('userModal').style.display = 'block';
+  document.getElementById('modalOverlay').style.display = 'block';
+}
+
+function closeUserModal() {
+  document.getElementById('userModal').style.display = 'none';
+  document.getElementById('modalOverlay').style.display = 'none';
+  document.getElementById('formUsername').disabled = false;
+}
+
+async function saveUser() {
+  const id = document.getElementById('editUserId').value;
+  const data = {
+    username: document.getElementById('formUsername').value,
+    display_name: document.getElementById('formDisplayName').value,
+    password: document.getElementById('formPassword').value,
+    role: document.getElementById('formRole').value,
+  };
+  if (!data.username) { alert('请输入用户名'); return; }
+  if (!id && !data.password) { alert('请设置密码'); return; }
+
+  try {
+    let resp;
+    if (id) {
+      resp = await fetch(`/api/admin/users/${id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({display_name: data.display_name, role: data.role}),
+      });
+    } else {
+      resp = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data),
+      });
+    }
+    if (resp.ok) {
+      closeUserModal();
+      loadUsers();
+    } else {
+      const err = await resp.json();
+      alert(err.detail || '操作失败');
+    }
+  } catch (e) {
+    alert('网络错误: ' + e.message);
+  }
+}
+
+async function toggleUser(id) {
+  try {
+    const resp = await fetch(`/api/admin/users/${id}/toggle`, {method: 'PATCH'});
+    if (resp.ok) loadUsers();
+    else { const err = await resp.json(); alert(err.detail || '操作失败'); }
+  } catch (e) { alert('网络错误: ' + e.message); }
+}
+
+function showResetPwd(id) {
+  const newPwd = prompt('请输入新密码（至少6位）');
+  if (!newPwd || newPwd.length < 6) { alert('密码至少6位'); return; }
+  fetch(`/api/admin/users/${id}/reset-password`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({new_password: newPwd}),
+  }).then(r => r.json()).then(d => {
+    if (d.message) { alert('密码已重置'); loadUsers(); }
+    else alert(d.detail || '操作失败');
+  }).catch(e => alert('网络错误: ' + e.message));
+}
+
+loadUsers();
+</script>
+{% endraw %}
+{% endblock %}

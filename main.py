@@ -549,6 +549,45 @@ async def admin_rules_edit_page(request: Request, rule_id: int, db: AsyncSession
     })
 
 
+# ── Admin: User management page ─────────────────────────
+
+@app.get("/admin/users", response_class=HTMLResponse)
+async def admin_users_page(request: Request):
+    """用户管理页面。"""
+    user = request.state.current_user
+    if not user or "admin" not in user.get("role", "").split(","):
+        return RedirectResponse(url="/login")
+    return templates.TemplateResponse(request, "admin/users.html", {
+        "current_user": user,
+    })
+
+
+# ── Admin: LLM config page ─────────────────────────────
+
+@app.get("/admin/llm-config", response_class=HTMLResponse)
+async def admin_llm_config_page(request: Request):
+    """LLM 配置页面。"""
+    user = request.state.current_user
+    if not user or "admin" not in user.get("role", "").split(","):
+        return RedirectResponse(url="/login")
+    return templates.TemplateResponse(request, "admin/llm_config.html", {
+        "current_user": user,
+    })
+
+
+# ── Admin: Audit log page ──────────────────────────────
+
+@app.get("/admin/audit-log", response_class=HTMLResponse)
+async def admin_audit_log_page(request: Request):
+    """审计日志页面。"""
+    user = request.state.current_user
+    if not user or "admin" not in user.get("role", "").split(","):
+        return RedirectResponse(url="/login")
+    return templates.TemplateResponse(request, "admin/audit_log.html", {
+        "current_user": user,
+    })
+
+
 # ── Include routers ───────────────────────────────────────
 
 from routers import auth, rules, documents, reports, reviews, admin

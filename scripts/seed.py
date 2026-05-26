@@ -17,8 +17,22 @@ import sys
 try:
     import bcrypt
 except ImportError:
-    import pip
-    pip.main(['install', 'bcrypt', '-i', 'https://pypi.tuna.tsinghua.edu.cn/simple'])
+    # 尝试在线安装，失败则友好提示离线方案
+    try:
+        import pip
+        pip.main(['install', 'bcrypt'])
+    except Exception:
+        print("=" * 60)
+        print("错误: 未找到 bcrypt 模块，且自动安装失败。")
+        print()
+        print("在线环境请执行：")
+        print("    pip install bcrypt")
+        print()
+        print("离线环境请确认：")
+        print("    1. 已安装所有依赖：pip install -r requirements.txt")
+        print("    2. 或已下载 bcrypt whl 包并传入内网")
+        print("=" * 60)
+        sys.exit(1)
     import bcrypt
 
 sys.path.insert(0, '.')

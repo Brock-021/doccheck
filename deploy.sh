@@ -25,8 +25,26 @@ PYTHON="python3"
 VENV_DIR="$APP_DIR/venv"
 SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
 
-# 清华镜像源（内网无外网时注释掉）
-PIP_MIRROR="-i https://pypi.tuna.tsinghua.edu.cn/simple"
+# 网络模式检测：不能 ping 通 pypi.org/pypi.tuna 则视为离线
+if command -v curl &>/dev/null && curl -s --connect-timeout 3 https://pypi.org >/dev/null 2>&1; then
+    ONLINE_MODE=true
+    # 清华镜像源（内网无外网时自动跳过）
+    PIP_MIRROR="-i https://pypi.tuna.tsinghua.edu.cn/simple"
+    PIP_FIND_LINKS=""
+    echo "  ✅ 检测到外网连接，使用在线安装模式"
+else
+    ONLINE_MODE=false
+    PIP_MIRROR=""
+    # 如果存在离线包目录，使用本地包安装
+    if [ -d "$APP_DIR/pip-packages" ]; then
+        PIP_FIND_LINKS="--find-links=./pip-packages"
+        echo "  ✅ 检测到离线包目录 pip-packages/，使用离线安装模式"
+    else
+        PIP_FIND_LINKS=""
+        echo "  ⚠️  无外网连接，且未检测到 pip-packages/ 目录"
+        echo "     离线安装请参考部署手册 3.2.2 节"
+    fi
+fi
 
 echo "=========================================="
 echo "  DocCheck · 一键部署"
@@ -73,10 +91,11 @@ echo ""
 echo "[3/5] 安装 Python 包..."
 
 pip install --upgrade pip -q $PIP_MIRROR
-pip install -r "$APP_DIR/requirements.txt" $PIP_MIRROR
+PIP_EXTRA="$PIP_MIRROR $PIP_FIND_LINKS"
+pip install -r "$APP_DIR/requirements.txt" $PIP_EXTRA
 
 # 安装 reportlab（PDF 导出需要）
-pip install reportlab $PIP_MIRROR 2>/dev/null || echo "  ⚠️  reportlab 安装失败，PDF 导出不可用"
+pip install reportlab $PIP_EXTRA 2>/dev/null || echo "  ⚠️  reportlab 安装失败，PDF 导出不可用"
 
 echo "  ✅ Python 包安装完成"
 

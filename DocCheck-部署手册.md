@@ -131,16 +131,22 @@ pip install reportlab
 
 #### 3.2.2 离线安装（内网完全无外网）
 
+`deploy.sh` 会自动检测网络状态：
+- 有外网 → 自动用清华镜像源安装
+- 无外网 → 跳过在线安装，提示引用下面的离线方案
+
 **方案A：外网打包虚拟环境（推荐）**
 
-在有外网的机器上，先按 3.2.1 安装好所有依赖，然后将整个 `venv/` 目录打包传入内网：
+在有外网的机器上，先安装好所有依赖，然后将整个 `venv/` 目录打包传入内网：
 
 ```bash
 # 在外网机器上
 cd doccheck
+python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
-pip install reportlab
+pip install --upgrade pip
+pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip install reportlab -i https://pypi.tuna.tsinghua.edu.cn/simple
 cd ..
 tar czf doccheck-venv.tar.gz doccheck/venv
 
@@ -150,25 +156,29 @@ cd /path/to/doccheck
 tar xzf /path/to/doccheck-venv.tar.gz --strip-components=1
 ```
 
-> 注意：需确保外网和内网的操作系统、Python 版本一致（如都是 Ubuntu 22.04 + Python 3.11），否则虚拟环境可能不兼容。
+> ⚠️ 注意：需确保外网和内网的操作系统、Python 版本一致（如都是 Ubuntu 22.04 + Python 3.11），否则虚拟环境可能不兼容。
 
-**方案B：下载 whl 包离线安装**
+**方案B：下载 whl 包传入内网**
 
 ```bash
 # 在外网机器上，下载所有依赖包到本地目录
 cd doccheck
-pip download -r requirements.txt -d ./pip-packages
-pip download reportlab -d ./pip-packages
+pip download -r requirements.txt -d ./pip-packages -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip download reportlab -d ./pip-packages -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-# 将 pip-packages/ 目录和源码包一起传入内网
+# 将 app/ 目录（源码）+ pip-packages/ 目录一起打包传入内网
+cd ..
+tar czf doccheck-offline.tar.gz doccheck
 
-# 在目标服务器上，从本地包安装
-cd doccheck
+# 在目标服务器上解压后，从本地包安装
+cd /path/to/doccheck
 python3 -m venv venv
 source venv/bin/activate
 pip install --no-index --find-links=./pip-packages -r requirements.txt
 pip install --no-index --find-links=./pip-packages reportlab
 ```
+
+> 此时再运行 `deploy.sh`，脚本会自动检测到 `pip-packages/` 目录，直接使用离线模式安装，**不会**尝试连接外网。
 
 ### 3.3 初始化数据库
 

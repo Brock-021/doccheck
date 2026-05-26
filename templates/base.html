@@ -36,7 +36,7 @@
       <li><a href="/admin/users" class="{% if '/admin/users' in request.url.path %}active{% endif %}">👥 用户管理</a></li>
       <li><a href="/admin/llm-config" class="{% if '/admin/llm-config' in request.url.path %}active{% endif %}">🤖 LLM 配置</a></li>
       {% endif %}
-      {% if 'admin' in role_list or 'reviewer' in role_list %}
+      {% if 'reviewer' in role_list and 'admin' not in role_list %}
       <li><a href="/admin/audit-log" class="{% if '/admin/audit-log' in request.url.path %}active{% endif %}">📝 审计日志</a></li>
       {% endif %}
     </ul>

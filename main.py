@@ -682,7 +682,7 @@ async def admin_audit_log_page(request: Request):
     if not user:
         return RedirectResponse(url="/login")
     user_roles = user.get("role", "").split(",")
-    if "admin" not in user_roles and "reviewer" not in user_roles:
+    if "admin" in user_roles or "reviewer" not in user_roles:
         return RedirectResponse(url="/login")
     return templates.TemplateResponse(request, "admin/audit_log.html", {
         "current_user": user,

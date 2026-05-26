@@ -340,7 +340,7 @@ async def list_audit_logs(
     if not user:
         raise HTTPException(status_code=403, detail="权限不足")
     user_roles = user.get("role", "").split(",")
-    if "admin" not in user_roles and "reviewer" not in user_roles:
+    if "admin" in user_roles or "reviewer" not in user_roles:
         raise HTTPException(status_code=403, detail="权限不足")
 
     logs, total = await get_audit_logs(

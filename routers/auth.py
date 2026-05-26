@@ -103,6 +103,7 @@ def templates_login(request: Request, error: str = None) -> HTMLResponse:
 
 
 @router.post("/api/auth/logout")
+@router.get("/api/auth/logout")
 async def logout(request: Request, db: AsyncSession = Depends(get_db)):
     """登出。"""
     session_id = request.cookies.get("session")

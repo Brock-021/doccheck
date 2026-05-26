@@ -247,13 +247,56 @@ async def document_upload_page(request: Request, db: AsyncSession = Depends(get_
 # ── Document list page ────────────────────────────────────────
 
 @app.get("/documents", response_class=HTMLResponse)
-async def document_list_page(request: Request):
+async def document_list_page(request: Request, db: AsyncSession = Depends(get_db)):
     """文档历史列表页面。"""
     user = request.state.current_user
     if not user:
         return RedirectResponse(url="/login")
+
+    from models import Document, DocType, CheckTask
+    from sqlalchemy import select, func
+
+    user_roles = user.get("role", "").split(",")
+    query = select(Document)
+    if "admin" not in user_roles:
+        query = query.where(Document.user_id == user["user_id"])
+    query = query.order_by(Document.upload_time.desc()).limit(50)
+
+    result = await db.execute(query)
+    docs = result.scalars().all()
+
+    documents = []
+    for doc in docs:
+        dt_result = await db.execute(select(DocType).where(DocType.id == doc.doc_type_id))
+        dt = dt_result.scalar_one_or_none()
+
+        ct_result = await db.execute(
+            select(CheckTask).where(CheckTask.document_id == doc.id)
+            .order_by(CheckTask.created_at.desc()).limit(1)
+        )
+        ct = ct_result.scalar_one_or_none()
+
+        count_result = await db.execute(
+            select(func.count(CheckTask.id)).where(CheckTask.document_id == doc.id)
+        )
+
+        documents.append({
+            "id": doc.id,
+            "user_id": doc.user_id,
+            "doc_type_id": doc.doc_type_id,
+            "doc_type_name": dt.name if dt else None,
+            "filename": doc.original_filename or doc.filename,
+            "original_filename": doc.original_filename,
+            "file_size": doc.file_size,
+            "upload_time": doc.upload_time.strftime("%Y-%m-%d %H:%M") if doc.upload_time else "",
+            "check_count": count_result.scalar() or 0,
+            "last_check_status": ct.status if ct else None,
+            "last_check_time": ct.created_at if ct else None,
+        })
+
     return templates.TemplateResponse(request, "documents/list.html", {
         "current_user": user,
+        "documents": documents,
     })
 
 

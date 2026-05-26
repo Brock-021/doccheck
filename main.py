@@ -679,7 +679,10 @@ async def admin_doc_types_page(request: Request):
 async def admin_audit_log_page(request: Request):
     """审计日志页面。"""
     user = request.state.current_user
-    if not user or "admin" not in user.get("role", "").split(","):
+    if not user:
+        return RedirectResponse(url="/login")
+    user_roles = user.get("role", "").split(",")
+    if "admin" not in user_roles and "reviewer" not in user_roles:
         return RedirectResponse(url="/login")
     return templates.TemplateResponse(request, "admin/audit_log.html", {
         "current_user": user,

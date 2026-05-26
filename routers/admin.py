@@ -337,7 +337,10 @@ async def list_audit_logs(
 ):
     """获取审计日志。"""
     user = getattr(request.state, "current_user", None)
-    if not user or "admin" not in user.get("role", "").split(","):
+    if not user:
+        raise HTTPException(status_code=403, detail="权限不足")
+    user_roles = user.get("role", "").split(",")
+    if "admin" not in user_roles and "reviewer" not in user_roles:
         raise HTTPException(status_code=403, detail="权限不足")
 
     logs, total = await get_audit_logs(

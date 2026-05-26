@@ -68,11 +68,20 @@
     <button class="btn btn-success" onclick="submitConclusion('pass', '')">✅ 通过</button>
     <button class="btn btn-warning" onclick="showConclusionRemark('conditional_pass')">⚠️ 有条件通过</button>
     <button class="btn btn-danger" onclick="showConclusionRemark('fail')">❌ 不通过</button>
-    <button class="btn btn-primary" onclick="batchConfirmAll()" id="batchConfirmBtn" style="margin-left: auto;">⚡ 一键全部确认</button>
   </div>
-  <div id="batchConfirmStatus" style="margin-top: 0.5rem; font-size: 0.8rem; color: #64748b; display: none;"></div>
 </div>
 {% endif %}
+
+<!-- 批量操作区（始终显示，方便审核人员批量操作检查结果） -->
+<div class="card" style="margin-bottom: 1.5rem; background: #f0f9ff; border: 1px solid #bae6fd;">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+    <h4 style="margin-bottom: 0;">⚡ 批量操作</h4>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <button class="btn btn-primary" onclick="batchConfirmAll()" id="batchConfirmBtn">一键全部确认</button>
+      <span id="batchConfirmStatus" style="font-size: 0.8rem; color: #64748b; display: none;"></span>
+    </div>
+  </div>
+</div>
 
 <!-- 检查明细列表 -->
 <h3 style="margin-bottom: 1rem;">检查明细 <small style="font-weight: normal; color: #94a3b8;">（点击问题项可操作）</small></h3>

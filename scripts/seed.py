@@ -37,6 +37,7 @@ async def seed():
             ('reviewer', 'review123', '文档审核员', 'reviewer'),
             ('zhangsan', 'doc123456', '张三', 'user'),
             ('lisi', 'doc123456', '李四', 'user'),
+            ('writer', 'writer123', '文档编写员', 'user'),
         ]
         for username, password, display_name, role in users_data:
             exists = await db.execute(select(User).where(User.username == username))

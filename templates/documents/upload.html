@@ -137,23 +137,36 @@ uploadForm.addEventListener('submit', async (e) => {
         </div>
         <p>检查任务 ID: ${data.check_task_id}</p>
         <div class="form-actions">
-          <a href="/reports/${data.report_id || 0}" class="btn btn-primary">查看报告</a>
+          <a id="viewReportLink" href="/documents" class="btn btn-primary">查看报告</a>
           <a href="/documents" class="btn">查看文档列表</a>
         </div>
       `;
 
       // Poll for completion
       const taskId = data.check_task_id;
+      let reportId = null;
       const pollInterval = setInterval(async () => {
         const statusResp = await fetch(`/api/documents/check-tasks/${taskId}/status`);
         const statusData = await statusResp.json();
         if (statusData.status === 'done') {
           clearInterval(pollInterval);
+          // Get report id
+          try {
+            const histResp = await fetch(`/api/documents/${data.document_id}/history`);
+            const histData = await histResp.json();
+            if (histData && histData.length > 0) {
+              reportId = histData[0].report_id;
+            }
+          } catch(e) {}
           resultArea.innerHTML += `
             <div class="alert alert-success" style="margin-top: 1rem;">
               ✅ AI 检查已完成！
             </div>
           `;
+          // Update the view report link
+          if (reportId) {
+            document.getElementById('viewReportLink').href = `/reports/${reportId}`;
+          }
         } else if (statusData.status === 'failed') {
           clearInterval(pollInterval);
           resultArea.innerHTML += `

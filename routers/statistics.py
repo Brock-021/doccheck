@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
-from sqlalchemy import select, func, distinct
+from sqlalchemy import select, func, distinct, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -226,7 +226,7 @@ async def get_statistics(
             Rule.name,
             func.count(CheckResult.id).label("hit_count"),
             func.sum(
-                func.case((CheckResult.compliant == "false", 1), else_=0)
+                case((CheckResult.compliant == "false", 1), else_=0)
             ).label("fail_count"),
         )
         .select_from(Rule)

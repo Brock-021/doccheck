@@ -37,14 +37,41 @@ DocCheck 是一款基于 AI 的文档合规检查工具，支持 .docx 文档上
 
 ## 2. 快速部署（一键脚本）
 
+### 2.1 有外网可连 git（开发环境/测试环境）
+
 ```bash
-# 1. 克隆代码
+# 1. 获取代码
 git clone https://github.com/Brock-021/doccheck.git
 cd doccheck
 
 # 2. 一键部署（需 sudo 权限）
 sudo bash deploy.sh
 ```
+
+### 2.2 内网无法连 git（生产环境/内网环境）
+
+```bash
+# 1. 在有外网的机器上打好完整源码包（含虚拟环境）
+#    外网机器执行：
+cd doccheck
+tar czf doccheck-full.tar.gz \
+    --exclude='venv' \
+    --exclude='.git' \
+    --exclude='__pycache__' \
+    --exclude='*.pyc' \
+    .
+
+# 2. 将 doccheck-full.tar.gz 通过 U盘/内网文件服务器/scp 传到目标服务器
+
+# 3. 在目标服务器上解压
+tar xzf doccheck-full.tar.gz
+cd doccheck
+
+# 4. 一键部署（需 sudo 权限）
+sudo bash deploy.sh
+```
+
+> 💡 如外网也无法打包虚拟环境，可按 [第3.2节](#32-离线安装-Python-依赖) 的方式将 Python 包下载到本地后传入。
 
 部署脚本会自动完成：
 
@@ -86,6 +113,8 @@ sudo apt install -y fonts-noto-cjk
 
 ### 3.2 创建虚拟环境并安装依赖
 
+#### 3.2.1 有外网可连 PyPI
+
 ```bash
 cd doccheck
 python3 -m venv venv
@@ -96,8 +125,49 @@ pip install -r requirements.txt
 # 如需 PDF 导出功能
 pip install reportlab
 
-# 如内网无外网，可使用清华镜像源
+# 内网但有外网镜像源
 # pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+#### 3.2.2 离线安装（内网完全无外网）
+
+**方案A：外网打包虚拟环境（推荐）**
+
+在有外网的机器上，先按 3.2.1 安装好所有依赖，然后将整个 `venv/` 目录打包传入内网：
+
+```bash
+# 在外网机器上
+cd doccheck
+source venv/bin/activate
+pip install -r requirements.txt
+pip install reportlab
+cd ..
+tar czf doccheck-venv.tar.gz doccheck/venv
+
+# 将 doccheck-venv.tar.gz 传入内网目标服务器
+# 在目标服务器上
+cd /path/to/doccheck
+tar xzf /path/to/doccheck-venv.tar.gz --strip-components=1
+```
+
+> 注意：需确保外网和内网的操作系统、Python 版本一致（如都是 Ubuntu 22.04 + Python 3.11），否则虚拟环境可能不兼容。
+
+**方案B：下载 whl 包离线安装**
+
+```bash
+# 在外网机器上，下载所有依赖包到本地目录
+cd doccheck
+pip download -r requirements.txt -d ./pip-packages
+pip download reportlab -d ./pip-packages
+
+# 将 pip-packages/ 目录和源码包一起传入内网
+
+# 在目标服务器上，从本地包安装
+cd doccheck
+python3 -m venv venv
+source venv/bin/activate
+pip install --no-index --find-links=./pip-packages -r requirements.txt
+pip install --no-index --find-links=./pip-packages reportlab
 ```
 
 ### 3.3 初始化数据库
@@ -249,6 +319,8 @@ server {
 
 ## 7. 升级
 
+### 7.1 有外网（直接拉取最新代码）
+
 ```bash
 cd /path/to/doccheck
 git pull
@@ -257,7 +329,43 @@ pip install -r requirements.txt   # 更新依赖
 sudo systemctl restart doccheck   # 重启服务
 ```
 
-> 升级不涉及数据库迁移，数据（用户、规则、检查记录）保留不变。如需数据库模型变更，请参考 Release Notes。
+### 7.2 内网无外网（更换源码包）
+
+1. 在外网机器上拉取最新代码
+2. 打包源码（不含 `.git` 和 `venv`）：
+
+```bash
+cd doccheck
+tar czf doccheck-update.tar.gz \
+    --exclude='venv' \
+    --exclude='.git' \
+    --exclude='__pycache__' \
+    --exclude='*.pyc' \
+    .
+```
+
+3. 将 `doccheck-update.tar.gz` 传入内网目标服务器
+4. 在内网服务器上替换代码：
+
+```bash
+cd /path/to/doccheck
+
+# 备份数据文件（数据库 + 上传的文档）
+cp data/doccheck.db data/doccheck.db.bak   # 备份数据库
+cp -r uploads uploads.bak                   # 备份上传的文件
+
+# 解压新版本代码
+tar xzf /path/to/doccheck-update.tar.gz
+
+# 检查是否有 Python 依赖变更
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 重启服务
+sudo systemctl restart doccheck
+```
+
+> 升级不涉及数据库迁移，数据（用户、规则、检查记录）保留不变。如因模型变更需要迁移，会随 Release Notes 说明。
 
 ---
 

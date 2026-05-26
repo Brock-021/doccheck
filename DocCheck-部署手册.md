@@ -39,6 +39,8 @@ DocCheck 是一款基于 AI 的文档合规检查工具，支持 .docx 文档上
 
 ### 2.1 有外网可连 git（开发环境/测试环境）
 
+使用在线部署脚本 `deploy.sh`，自动从 PyPI 安装依赖。
+
 ```bash
 # 1. 获取代码
 git clone https://github.com/Brock-021/doccheck.git
@@ -50,28 +52,35 @@ sudo bash deploy.sh
 
 ### 2.2 内网无法连 git（生产环境/内网环境）
 
+使用离线部署脚本 `deploy-offline.sh`，从本地 whl 包安装依赖，**全程不访问外网**。
+
 ```bash
-# 1. 在有外网的机器上打好完整源码包（含虚拟环境）
+# 1. 在外网机器上，clone 代码并下载离线依赖包
 #    外网机器执行：
+git clone https://github.com/Brock-021/doccheck.git
 cd doccheck
-tar czf doccheck-full.tar.gz \
-    --exclude='venv' \
+pip download -r requirements.txt -d ./pip-packages -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip download reportlab -d ./pip-packages -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 2. 打包源码 + 离线包
+cd ..
+tar czf doccheck-offline.tar.gz \
     --exclude='.git' \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
-    .
+    doccheck
 
-# 2. 将 doccheck-full.tar.gz 通过 U盘/内网文件服务器/scp 传到目标服务器
+# 3. 将 doccheck-offline.tar.gz 通过 U盘/内网文件服务器/scp 传入目标服务器
 
-# 3. 在目标服务器上解压
-tar xzf doccheck-full.tar.gz
+# 4. 在目标服务器上解压
+tar xzf doccheck-offline.tar.gz
 cd doccheck
 
-# 4. 一键部署（需 sudo 权限）
-sudo bash deploy.sh
+# 5. 一键部署（需 sudo 权限，全程离线）
+sudo bash deploy-offline.sh
 ```
 
-> 💡 如外网也无法打包虚拟环境，可按 [第3.2节](#32-离线安装-Python-依赖) 的方式将 Python 包下载到本地后传入。
+> 💡 `deploy-offline.sh` 会自动检测 `pip-packages/` 目录，使用 `--no-index --find-links` 模式安装，不会尝试连接外网。
 
 部署脚本会自动完成：
 
@@ -131,13 +140,38 @@ pip install reportlab
 
 #### 3.2.2 离线安装（内网完全无外网）
 
-`deploy.sh` 会自动检测网络状态：
-- 有外网 → 自动用清华镜像源安装
-- 无外网 → 跳过在线安装，提示引用下面的离线方案
+> 内网环境推荐使用配套的 **`deploy-offline.sh`** 一键部署脚本，它会自动使用 `--no-index --find-links` 模式从本地 whl 包安装，**全程不访问外网**。
 
-**方案A：外网打包虚拟环境（推荐）**
+**方案A：外网下载 whl 包传入内网（推荐，与 deploy-offline.sh 配合）**
 
-在有外网的机器上，先安装好所有依赖，然后将整个 `venv/` 目录打包传入内网：
+```bash
+# 在外网机器上，下载所有依赖包到本地目录
+cd doccheck
+pip download -r requirements.txt -d ./pip-packages -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip download reportlab -d ./pip-packages -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 打包源码 + 离线依赖包
+cd ..
+tar czf doccheck-offline.tar.gz \
+    --exclude='.git' \
+    --exclude='__pycache__' \
+    --exclude='*.pyc' \
+    doccheck
+
+# 将 doccheck-offline.tar.gz 传入内网目标服务器
+# 在目标服务器上解压
+tar xzf doccheck-offline.tar.gz
+cd doccheck
+
+# 一键部署（全程离线）
+sudo bash deploy-offline.sh
+```
+
+`deploy-offline.sh` 会自动：检测 `pip-packages/` 目录 → 创建虚拟环境 → 从本地 whl 安装（`--no-index --find-links`）→ 初始化数据库 → 创建 systemd 服务。
+
+**方案B：外网打包虚拟环境传入（备选，OS/Python 版本需一致）**
+
+在外网机器上先安装好所有依赖，然后将整个 `venv/` 目录打包传入内网：
 
 ```bash
 # 在外网机器上
@@ -147,38 +181,22 @@ source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 pip install reportlab -i https://pypi.tuna.tsinghua.edu.cn/simple
-cd ..
-tar czf doccheck-venv.tar.gz doccheck/venv
+
+# 打包 venv 目录
+tar czf doccheck-venv.tar.gz venv/
 
 # 将 doccheck-venv.tar.gz 传入内网目标服务器
 # 在目标服务器上
 cd /path/to/doccheck
-tar xzf /path/to/doccheck-venv.tar.gz --strip-components=1
-```
-
-> ⚠️ 注意：需确保外网和内网的操作系统、Python 版本一致（如都是 Ubuntu 22.04 + Python 3.11），否则虚拟环境可能不兼容。
-
-**方案B：下载 whl 包传入内网**
-
-```bash
-# 在外网机器上，下载所有依赖包到本地目录
-cd doccheck
-pip download -r requirements.txt -d ./pip-packages -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip download reportlab -d ./pip-packages -i https://pypi.tuna.tsinghua.edu.cn/simple
-
-# 将 app/ 目录（源码）+ pip-packages/ 目录一起打包传入内网
-cd ..
-tar czf doccheck-offline.tar.gz doccheck
-
-# 在目标服务器上解压后，从本地包安装
-cd /path/to/doccheck
-python3 -m venv venv
+tar xzf /path/to/doccheck-venv.tar.gz
 source venv/bin/activate
-pip install --no-index --find-links=./pip-packages -r requirements.txt
-pip install --no-index --find-links=./pip-packages reportlab
+
+# 确认依赖已安装后，再手动运行后续步骤
+python3 scripts/seed.py
+# ... systemd 配置参见 3.5 节
 ```
 
-> 此时再运行 `deploy.sh`，脚本会自动检测到 `pip-packages/` 目录，直接使用离线模式安装，**不会**尝试连接外网。
+> ⚠️ 需确保外网和内网的操作系统、Python 版本一致（如都是 Ubuntu 22.04 + Python 3.11），否则虚拟环境可能不兼容。
 
 ### 3.3 初始化数据库
 
@@ -369,7 +387,12 @@ tar xzf /path/to/doccheck-update.tar.gz
 
 # 检查是否有 Python 依赖变更
 source venv/bin/activate
-pip install -r requirements.txt
+# 内网环境：如果 pip-packages/ 存在则离线安装
+if [ -d pip-packages ]; then
+    pip install --no-index --find-links=./pip-packages -r requirements.txt
+else
+    pip install -r requirements.txt
+fi
 
 # 重启服务
 sudo systemctl restart doccheck

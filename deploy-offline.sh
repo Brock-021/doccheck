@@ -1,23 +1,17 @@
 #!/bin/bash
-# DocCheck · 一键部署脚本（在线版）
+# DocCheck · 一键部署脚本（离线版）
 #
-# 适用环境：有外网连接的 Linux 服务器
+# 适用环境：内网无外网的 Linux 服务器
 # 最低配置：2核2G
 #
 # 用法：
-#     sudo bash deploy.sh
-#
-# 内网无外网环境，请使用 deploy-offline.sh
-#
-# 适用环境：Linux (Ubuntu 20.04+/Debian 11+)
-# 最低配置：2核2G
-#
-# 用法：
-#     sudo bash deploy.sh
+#     1. 在外网机器上打包源码和依赖（见部署手册 3.2.2 节）
+#     2. 将源码包传入内网服务器并解压
+#     3. sudo bash deploy-offline.sh
 #
 # 该脚本会：
 #     1. 安装系统依赖（python3, pip 等）
-#     2. 创建虚拟环境并安装 Python 包
+#     2. 创建虚拟环境并从本地 whl 包目录安装依赖
 #     3. 初始化数据库和种子数据
 #     4. 创建 systemd 服务（自动开机启动）
 #     5. 启动服务
@@ -33,11 +27,19 @@ PYTHON="python3"
 VENV_DIR="$APP_DIR/venv"
 SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
 
-# 清华镜像源（内网无网络时请使用 deploy-offline.sh）
-PIP_MIRROR="-i https://pypi.tuna.tsinghua.edu.cn/simple"
+# 检测离线包目录
+if [ -d "$APP_DIR/pip-packages" ]; then
+    PIP_FLAGS="--no-index --find-links=./pip-packages"
+    echo "  ✅ 检测到离线包目录 pip-packages/，将从本地安装"
+else
+    PIP_FLAGS=""
+    echo "  ⚠️  未检测到 pip-packages/ 目录"
+    echo "     请确认已按部署手册 3.2.2 节准备离线依赖包"
+    echo "     或已预先在虚拟环境中安装了所有依赖"
+fi
 
 echo "=========================================="
-echo "  DocCheck · 一键部署"
+echo "  DocCheck · 一键部署（离线版）"
 echo "=========================================="
 echo "应用目录: $APP_DIR"
 echo "服务端口: $APP_PORT"
@@ -58,7 +60,8 @@ if fc-list :lang=zh 2>/dev/null | grep -q .; then
     echo "  ✅ 中文字体已安装"
 else
     echo "  ⚠️  未检测到中文字体，PDF 导出可能中文乱码"
-    echo "     若要支持 PDF 中文: sudo apt install fonts-noto-cjk"
+    echo "     若要支持 PDF 中文，请联系运维安装 fonts-noto-cjk"
+    echo "     或在外网下载 deb 包传入内网安装"
 fi
 
 echo "  ✅ 系统依赖检查完成"
@@ -76,15 +79,18 @@ fi
 
 source "$VENV_DIR/bin/activate"
 
-# Step 3: 安装 Python 依赖
+# Step 3: 安装 Python 依赖（离线模式）
 echo ""
-echo "[3/5] 安装 Python 包..."
+echo "[3/5] 安装 Python 包（离线模式）..."
 
-pip install --upgrade pip -q $PIP_MIRROR
-pip install -r "$APP_DIR/requirements.txt" $PIP_MIRROR
-
-# 安装 reportlab（PDF 导出需要）
-pip install reportlab $PIP_MIRROR 2>/dev/null || echo "  ⚠️  reportlab 安装失败，PDF 导出不可用"
+if [ -n "$PIP_FLAGS" ]; then
+    pip install --upgrade pip $PIP_FLAGS 2>/dev/null || true
+    pip install $PIP_FLAGS -r "$APP_DIR/requirements.txt"
+    pip install $PIP_FLAGS reportlab 2>/dev/null || echo "  ⚠️  reportlab 安装失败，PDF 导出不可用"
+else
+    echo "  ⚠️  跳过依赖安装（无 pip-packages/ 目录）"
+    echo "     请确认虚拟环境已预先安装所有依赖，否则运行时会出错"
+fi
 
 echo "  ✅ Python 包安装完成"
 

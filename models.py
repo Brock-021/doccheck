@@ -20,7 +20,7 @@ class User(Base):
     role = Column(String(64), nullable=False, default="writer")
     # role: admin | reviewer | writer | rule_admin | or comma-separated: "writer,reviewer"
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
     last_login = Column(DateTime, nullable=True)
 
     documents = relationship("Document", back_populates="user")
@@ -50,7 +50,7 @@ class Rule(Base):
     sort_order = Column(Integer, default=0, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     is_deprecated = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     doc_type = relationship("DocType", back_populates="rules")
     check_results = relationship("CheckResult", back_populates="rule")
@@ -65,7 +65,7 @@ class Document(Base):
     filename = Column(String(256), nullable=False)
     file_path = Column(String(512), nullable=False)
     file_size = Column(Integer, default=0)
-    upload_time = Column(DateTime, default=datetime.utcnow)
+    upload_time = Column(DateTime, default=datetime.now)
     original_filename = Column(String(256), nullable=True)
 
     user = relationship("User", back_populates="documents")
@@ -84,7 +84,7 @@ class CheckTask(Base):
     status = Column(String(32), default="pending")
     # status: pending | running | done | failed
     error_message = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
     completed_at = Column(DateTime, nullable=True)
 
     document = relationship("Document", back_populates="check_tasks")
@@ -150,4 +150,4 @@ class AuditLog(Base):
     target_id = Column(Integer, nullable=True)
     detail = Column(Text, nullable=True)
     ip_address = Column(String(64), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)

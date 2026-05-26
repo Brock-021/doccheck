@@ -130,7 +130,7 @@ async def run_check(
 
         if not matched_rules:
             check_task.status = "done"
-            check_task.completed_at = datetime.utcnow()
+            check_task.completed_at = datetime.now()
             await db.commit()
             # Create empty report
             report = Report(
@@ -174,7 +174,7 @@ async def run_check(
         if llm_response is None:
             check_task.status = "failed"
             check_task.error_message = f"LLM 调用失败（已重试 {llm_retries} 次）: {last_error}"
-            check_task.completed_at = datetime.utcnow()
+            check_task.completed_at = datetime.now()
             await db.commit()
             return
 
@@ -194,7 +194,7 @@ async def run_check(
         except (json.JSONDecodeError, ValueError) as e:
             check_task.status = "failed"
             check_task.error_message = f"LLM 返回格式错误: {e}"
-            check_task.completed_at = datetime.utcnow()
+            check_task.completed_at = datetime.now()
             await db.commit()
             return
 
@@ -258,12 +258,12 @@ async def run_check(
         # 8. Update task status
         check_task.status = "done"
         check_task.rule_count = total
-        check_task.completed_at = datetime.utcnow()
+        check_task.completed_at = datetime.now()
         await db.commit()
 
     except Exception as e:
         logger.error(f"Check task {check_task.id} failed: {e}", exc_info=True)
         check_task.status = "failed"
         check_task.error_message = str(e)
-        check_task.completed_at = datetime.utcnow()
+        check_task.completed_at = datetime.now()
         await db.commit()

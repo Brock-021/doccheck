@@ -57,7 +57,7 @@ async def login(
         return templates_login(request, error="用户名或密码错误")
 
     # Update last login
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now()
     await db.commit()
 
     # Create session
@@ -74,7 +74,7 @@ async def login(
         request.app.state.sessions = {}
     request.app.state.sessions[session_id] = {
         "data": session_data,
-        "expires": datetime.utcnow() + timedelta(minutes=SESSION_EXPIRE_MINUTES),
+        "expires": datetime.now() + timedelta(minutes=SESSION_EXPIRE_MINUTES),
     }
 
     from config import UPLOAD_DIR

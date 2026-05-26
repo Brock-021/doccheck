@@ -39,7 +39,7 @@ async def confirm_issue(
 
     check_result.review_status = "confirmed"
     check_result.reviewer_id = user["user_id"]
-    check_result.reviewed_at = datetime.utcnow()
+    check_result.reviewed_at = datetime.now()
     await db.commit()
 
     await log_action(db, user["user_id"], user["username"],
@@ -76,7 +76,7 @@ async def reject_issue(
     check_result.review_status = "rejected"
     check_result.review_remark = data.remark
     check_result.reviewer_id = user["user_id"]
-    check_result.reviewed_at = datetime.utcnow()
+    check_result.reviewed_at = datetime.now()
     await db.commit()
 
     await log_action(db, user["user_id"], user["username"],
@@ -113,7 +113,7 @@ async def ignore_issue(
     check_result.review_status = "ignored"
     check_result.review_remark = data.remark
     check_result.reviewer_id = user["user_id"]
-    check_result.reviewed_at = datetime.utcnow()
+    check_result.reviewed_at = datetime.now()
     await db.commit()
 
     await log_action(db, user["user_id"], user["username"],
@@ -150,7 +150,7 @@ async def conclude_report(
     report.conclusion = data.conclusion
     report.conclusion_remark = data.remark
     report.concluded_by = user["user_id"]
-    report.concluded_at = datetime.utcnow()
+    report.concluded_at = datetime.now()
     await db.commit()
 
     conclusion_labels = {
@@ -203,7 +203,7 @@ async def batch_confirm_report(
     if not pending_list:
         return {"message": "没有待审核的检查结果", "count": 0}
 
-    now = datetime.utcnow()
+    now = datetime.now()
     for cr in pending_list:
         cr.review_status = "confirmed"
         cr.reviewer_id = user["user_id"]

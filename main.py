@@ -5,6 +5,14 @@ DocCheck · FastAPI 主入口
     uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 """
 
+import os
+os.environ["TZ"] = "Asia/Shanghai"
+try:
+    import time
+    time.tzset()
+except AttributeError:
+    pass
+
 import logging
 from datetime import datetime
 from contextlib import asynccontextmanager
@@ -96,7 +104,7 @@ async def session_middleware(request: Request, call_next):
     if session_id and hasattr(app.state, "sessions"):
         session = app.state.sessions.get(session_id)
         if session:
-            if session["expires"] > datetime.utcnow():
+            if session["expires"] > datetime.now():
                 request.state.current_user = session["data"]
             else:
                 app.state.sessions.pop(session_id, None)

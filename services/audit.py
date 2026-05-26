@@ -28,7 +28,7 @@ async def log_action(
         target_id=target_id,
         detail=detail,
         ip_address=ip_address,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(),
     )
     db.add(log)
     await db.commit()

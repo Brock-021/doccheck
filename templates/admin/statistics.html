@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% block title %}统计分析 - DocCheck{% endblock %}
+{% block page_title %}📊 统计分析{% endblock %}
+
+{% block content %}
+<style>
+.stats-container { max-width: 1200px; }
+.filter-bar {
+  display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;
+  background: var(--bg-card); padding: 1rem 1.25rem; border-radius: 8px;
+  border: 1px solid var(--border); margin-bottom: 1.5rem;
+}
+.filter-bar label { font-size: 0.8rem; color: var(--text-secondary); }
+.filter-bar input[type="date"] {
+  border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.6rem;
+  font-size: 0.85rem; background: var(--bg-main);
+}
+.stat-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem; margin-bottom: 1.5rem;
+}
+.stat-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 1.25rem; text-align: center;
+  transition: box-shadow 0.2s;
+}
+.stat-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+.stat-card .num { font-size: 2rem; font-weight: 700; line-height: 1.2; }
+.stat-card .label { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem; }
+.section-title { font-size: 1.1rem; font-weight: 600; margin: 1.5rem 0 0.75rem; }
+.stats-table {
+  width: 100%; border-collapse: collapse; font-size: 0.9rem;
+  background: var(--bg-card); border-radius: 8px; overflow: hidden;
+}
+.stats-table th { background: var(--bg-main); text-align: left; padding: 0.6rem 0.75rem; font-weight: 600; font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.03em; border-bottom: 2px solid var(--border); }
+.stats-table td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); }
+.stats-table tr:last-child td { border-bottom: none; }
+.chart-bar-container { display: flex; align-items: center; gap: 0.5rem; }
+.chart-bar { height: 1.25rem; border-radius: 4px; min-width: 4px; transition: width 0.3s; }
+.chart-bar-blue { background: #3b82f6; }
+.chart-bar-green { background: #22c55e; }
+.chart-bar-red { background: #ef4444; }
+.chart-bar-amber { background: #f59e0b; }
+.chart-bar-purple { background: #a855f7; }
+.trend-chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; padding: 1rem 0; }
+.trend-bar { flex: 1; border-radius: 3px 3px 0 0; min-width: 8px; position: relative; background: #3b82f6; transition: height 0.3s; }
+.trend-bar:hover { opacity: 0.8; }
+.trend-label { font-size: 0.65rem; color: var(--text-secondary); text-align: center; margin-top: 0.25rem; white-space: nowrap; transform: rotate(-30deg); transform-origin: left top; }
+.loading { text-align: center; padding: 3rem; color: var(--text-secondary); }
+.error-msg { color: #ef4444; padding: 1rem; }
+</style>
+
+<div class="stats-container">
+  <!-- 筛选栏 -->
+  <div class="filter-bar">
+    <label>开始日期</label>
+    <input type="date" id="startDate">
+    <label>结束日期</label>
+    <input type="date" id="endDate">
+    <button class="btn btn-primary" onclick="loadStats()">查询</button>
+    <button class="btn" onclick="clearFilter()">显示全部</button>
+    <span id="filterHint" style="font-size: 0.8rem; color: var(--text-secondary); margin-left: 0.5rem;"></span>
+  </div>
+
+  <!-- 概览 -->
+  <div class="stat-grid" id="overviewCards"></div>
+
+  <!-- 按天趋势 -->
+  <div class="section-title">📈 检查趋势</div>
+  <div class="card" style="margin-bottom: 1.5rem; padding: 1rem;">
+    <div class="trend-chart" id="trendChart"></div>
+  </div>
+
+  <!-- 两列布局 -->
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+    <div>
+      <div class="section-title">📁 文档类型分布</div>
+      <div class="card" style="padding: 1rem; margin-bottom: 1.5rem;">
+        <table class="stats-table" id="docTypeTable"></table>
+      </div>
+    </div>
+    <div>
+      <div class="section-title">🧑 用户活跃度</div>
+      <div class="card" style="padding: 1rem; margin-bottom: 1.5rem;">
+        <table class="stats-table" id="userTable"></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 合规/审核/结论 -->
+  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5rem;">
+    <div>
+      <div class="section-title">✅ 合规统计</div>
+      <div class="card" style="padding: 1rem;">
+        <div id="compliantChart"></div>
+      </div>
+    </div>
+    <div>
+      <div class="section-title">🔍 审核状态</div>
+      <div class="card" style="padding: 1rem;">
+        <div id="reviewChart"></div>
+      </div>
+    </div>
+    <div>
+      <div class="section-title">📋 报告结论</div>
+      <div class="card" style="padding: 1rem;">
+        <div id="conclusionChart"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 规则命中 -->
+  <div class="section-title">📏 规则命中排行</div>
+  <div class="card" style="padding: 1rem; margin-bottom: 1.5rem;">
+    <table class="stats-table" id="ruleTable"></table>
+  </div>
+</div>
+
+<script>
+let currentData = null;
+
+function loadStats() {
+  const start = document.getElementById('startDate').value;
+  const end = document.getElementById('endDate').value;
+  let url = '/api/admin/statistics';
+  const params = [];
+  if (start) params.push('start=' + start);
+  if (end) params.push('end=' + end);
+  if (params.length) url += '?' + params.join('&');
+
+  document.getElementById('overviewCards').innerHTML = '<div class="loading">⏳ 加载中...</div>';
+  document.getElementById('filterHint').textContent = start || end ? '正在查询...' : '';
+
+  fetch(url)
+    .then(r => r.json())
+    .then(data => {
+      currentData = data;
+      renderAll(data);
+      document.getElementById('filterHint').textContent = start || end
+        ? (start || '不限') + ' ~ ' + (end || '不限') + ' | 共 ' + data.overview.check_count + ' 次检查'
+        : '全部数据';
+    })
+    .catch(e => {
+      document.getElementById('overviewCards').innerHTML = '<div class="error-msg">❌ 加载失败: ' + e.message + '</div>';
+    });
+}
+
+function clearFilter() {
+  document.getElementById('startDate').value = '';
+  document.getElementById('endDate').value = '';
+  loadStats();
+}
+
+function renderAll(data) {
+  renderOverview(data.overview);
+  renderTrend(data.daily_trend);
+  renderDocTypes(data.doc_type_stats);
+  renderUsers(data.user_stats);
+  renderCompliant(data.compliant_stats);
+  renderReview(data.review_stats);
+  renderConclusion(data.conclusion_stats);
+  renderRules(data.rule_stats);
+}
+
+function renderOverview(ov) {
+  const cards = [
+    { num: ov.doc_count, label: '📄 文档数', color: '#3b82f6' },
+    { num: ov.check_count, label: '🔍 总检查次数', color: '#8b5cf6' },
+    { num: ov.done_count, label: '✅ 成功', color: '#22c55e' },
+    { num: ov.failed_count, label: '❌ 失败', color: '#ef4444' },
+    { num: ov.user_count, label: '👥 用户数', color: '#f59e0b' },
+  ];
+  document.getElementById('overviewCards').innerHTML = cards.map(c =>
+    `<div class="stat-card"><div class="num" style="color:${c.color}">${c.num}</div><div class="label">${c.label}</div></div>`
+  ).join('');
+}
+
+function renderTrend(trend) {
+  const el = document.getElementById('trendChart');
+  if (!trend || trend.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-secondary)">暂无数据</div>';
+    return;
+  }
+  const maxVal = Math.max(...trend.map(t => t.count), 1);
+  el.innerHTML = trend.map(t => {
+    const pct = (t.count / maxVal) * 100;
+    const day = t.date.slice(5);
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;">
+      <div class="trend-bar" style="height:${Math.max(pct, 2)}%;" title="${t.date}: ${t.count}次">${t.count > 0 ? '<span style="position:absolute;top:-18px;font-size:0.7rem;width:100%;text-align:center;">' + t.count + '</span>' : ''}</div>
+      <div class="trend-label">${day}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderDocTypes(rows) {
+  const el = document.getElementById('docTypeTable');
+  if (!rows || rows.length === 0) {
+    el.innerHTML = '<tr><td style="text-align:center;padding:1rem;color:var(--text-secondary)">暂无数据</td></tr>';
+    return;
+  }
+  const maxVal = Math.max(...rows.map(r => r.check_count), 1);
+  el.innerHTML = '<tr><th>文档类型</th><th>文档数</th><th>检查次数</th><th></th></tr>' +
+    rows.map(r => `<tr>
+      <td>${r.name}</td>
+      <td>${r.doc_count}</td>
+      <td>${r.check_count}</td>
+      <td><div class="chart-bar-container"><div class="chart-bar chart-bar-blue" style="width:${(r.check_count/maxVal)*100}%; max-width:200px;"></div></div></td>
+    </tr>`).join('');
+}
+
+function renderUsers(rows) {
+  const el = document.getElementById('userTable');
+  if (!rows || rows.length === 0) {
+    el.innerHTML = '<tr><td style="text-align:center;padding:1rem;color:var(--text-secondary)">暂无数据</td></tr>';
+    return;
+  }
+  const maxVal = Math.max(...rows.map(r => r.upload_count), 1);
+  el.innerHTML = '<tr><th>用户</th><th>上传文档</th><th>检查次数</th><th></th></tr>' +
+    rows.map(r => `<tr>
+      <td>${r.display_name}</td>
+      <td>${r.upload_count}</td>
+      <td>${r.check_count}</td>
+      <td><div class="chart-bar-container"><div class="chart-bar chart-bar-green" style="width:${(r.upload_count/maxVal)*100}%; max-width:200px;"></div></div></td>
+    </tr>`).join('');
+}
+
+function renderCompliant(s) {
+  document.getElementById('compliantChart').innerHTML =
+    `<table class="stats-table">
+      <tr><th>状态</th><th>数量</th><th>占比</th></tr>
+      <tr><td style="color:#22c55e">✅ 通过</td><td>${s.pass}</td><td>${s.pass_rate}%</td></tr>
+      <tr><td style="color:#ef4444">❌ 不通过</td><td>${s.fail}</td><td>${s.fail_rate}%</td></tr>
+      <tr><td style="color:#94a3b8">❓ 未知</td><td>${s.unknown}</td><td>${s.total > 0 ? ((s.unknown/s.total)*100).toFixed(1) : 0}%</td></tr>
+      <tr style="font-weight:600"><td>合计</td><td>${s.total}</td><td>100%</td></tr>
+    </table>`;
+}
+
+function renderReview(s) {
+  document.getElementById('reviewChart').innerHTML =
+    `<table class="stats-table">
+      <tr><th>状态</th><th>数量</th></tr>
+      <tr><td style="color:#94a3b8">⏳ 待审核</td><td>${s.pending}</td></tr>
+      <tr><td style="color:#22c55e">✅ 已确认</td><td>${s.confirmed}</td></tr>
+      <tr><td style="color:#ef4444">✏️ 已驳回</td><td>${s.rejected}</td></tr>
+      <tr><td style="color:#64748b">⏭️ 已忽略</td><td>${s.ignored}</td></tr>
+      <tr style="font-weight:600"><td>合计</td><td>${s.total}</td></tr>
+    </table>`;
+}
+
+function renderConclusion(s) {
+  document.getElementById('conclusionChart').innerHTML =
+    `<table class="stats-table">
+      <tr><th>结论</th><th>数量</th></tr>
+      <tr><td style="color:#22c55e">✅ 通过</td><td>${s.pass}</td></tr>
+      <tr><td style="color:#f59e0b">⚠️ 有条件通过</td><td>${s.conditional_pass}</td></tr>
+      <tr><td style="color:#ef4444">❌ 不通过</td><td>${s.fail}</td></tr>
+      <tr><td style="color:#94a3b8">⏳ 待审核</td><td>${s.pending}</td></tr>
+      <tr style="font-weight:600"><td>合计</td><td>${s.total}</td></tr>
+    </table>`;
+}
+
+function renderRules(rows) {
+  const el = document.getElementById('ruleTable');
+  if (!rows || rows.length === 0) {
+    el.innerHTML = '<tr><td style="text-align:center;padding:1rem;color:var(--text-secondary)">暂无数据</td></tr>';
+    return;
+  }
+  const maxVal = Math.max(...rows.map(r => r.hit_count), 1);
+  el.innerHTML = '<tr><th>规则名称</th><th>命中次数</th><th>不通过次数</th><th></th></tr>' +
+    rows.map(r => `<tr>
+      <td>${r.name}</td>
+      <td>${r.hit_count}</td>
+      <td style="color:#ef4444">${r.fail_count}</td>
+      <td><div class="chart-bar-container"><div class="chart-bar ${r.fail_count > r.hit_count/2 ? 'chart-bar-red' : 'chart-bar-amber'}" style="width:${(r.hit_count/maxVal)*100}%; max-width:200px;"></div></div></td>
+    </tr>`).join('');
+}
+
+// 页面加载时自动加载
+document.addEventListener('DOMContentLoaded', loadStats);
+</script>
+{% endblock %}

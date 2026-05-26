@@ -765,9 +765,22 @@ async def admin_audit_log_page(request: Request):
     })
 
 
+# ── Admin: Statistics page ──────────────────────────
+
+@app.get("/admin/statistics", response_class=HTMLResponse)
+async def admin_statistics_page(request: Request):
+    """统计分析页面。"""
+    user = request.state.current_user
+    if not user or "admin" not in user.get("role", "").split(","):
+        return RedirectResponse(url="/login")
+    return templates.TemplateResponse(request, "admin/statistics.html", {
+        "current_user": user,
+    })
+
+
 # ── Include routers ───────────────────────────────────────
 
-from routers import auth, rules, documents, reports, reviews, admin
+from routers import auth, rules, documents, reports, reviews, admin, statistics
 
 app.include_router(auth.router)
 app.include_router(rules.router)
@@ -775,6 +788,7 @@ app.include_router(documents.router)
 app.include_router(reports.router)
 app.include_router(reviews.router)
 app.include_router(admin.router)
+app.include_router(statistics.router)
 
 
 # ── Health ────────────────────────────────────────────────

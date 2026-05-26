@@ -29,6 +29,8 @@ async def get_statistics(
 
     # 构建时间筛选条件
     filters = []
+    start_dt = None
+    end_dt = None
     if start:
         try:
             start_dt = datetime.strptime(start, "%Y-%m-%d")
@@ -200,22 +202,21 @@ async def get_statistics(
             conclusion_stats[c] += cnt
 
     # ── 7. 按天检查趋势（近30天或按时间范围） ──
-    from sqlalchemy import cast, Date
-    trend_query = (
-        select(
-            cast(CheckTask.created_at, Date).label("day"),
-            func.count(CheckTask.id).label("cnt"),
-        )
-    )
-    if filters:
-        trend_query = trend_query.where(*filters)
-    else:
-        # 无筛选时默认近30天
+    from sqlalchemy import text
+    trend_base = select(
+        text("DATE(created_at) AS day"),
+        func.count(CheckTask.id).label("cnt"),
+    ).select_from(CheckTask)
+    if start:
+        trend_base = trend_base.where(CheckTask.created_at >= start_dt)
+    if end:
+        trend_base = trend_base.where(CheckTask.created_at <= end_dt)
+    if not start and not end:
         from datetime import timedelta
-        trend_query = trend_query.where(
+        trend_base = trend_base.where(
             CheckTask.created_at >= datetime.now() - timedelta(days=30)
         )
-    trend_query = trend_query.group_by(cast(CheckTask.created_at, Date)).order_by(cast(CheckTask.created_at, Date))
+    trend_query = trend_base.group_by(text("day")).order_by(text("day"))
     trend_result = await db.execute(trend_query)
     daily_trend = [{"date": str(row[0]), "count": row[1]} for row in trend_result.all()]
 

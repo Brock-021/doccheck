@@ -39,10 +39,35 @@
   </div>
 </form>
 
-<div id="resultArea" style="display: none; margin-top: 2rem;">
-  <div class="loading">
-    <div class="spinner"></div>
-    <p>AI 检查进行中，请稍候...</p>
+<!-- 检查过程区域：初始隐藏 -->
+<div id="resultArea" style="display: none; margin-top: 2rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    text-align: center;">
+  <!-- 检查中：loader -->
+  <div id="checkingPanel">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p style="margin-top: 1rem; font-size: 1.1rem; font-weight: 500;">🔍 AI 正在检查文档合规性...</p>
+      <p style="margin-top: 0.5rem; font-size: 0.85rem; color: #94a3b8;" id="checkStatusHint">正在解析文档内容</p>
+    </div>
+  </div>
+  <!-- 检查完成：操作按钮 -->
+  <div id="donePanel" style="display: none;">
+    <div style="font-size: 3rem; margin-bottom: 0.5rem;">✅</div>
+    <p style="font-size: 1.1rem; font-weight: 500; color: #22c55e; margin-bottom: 1.5rem;">AI 检查已完成！</p>
+    <div class="form-actions" style="justify-content: center;">
+      <a id="viewReportLink" href="/documents" class="btn btn-primary" style="min-width: 140px; justify-content: center;">📄 查看报告</a>
+      <a href="/documents" class="btn" style="min-width: 140px; justify-content: center;">📂 文档列表</a>
+    </div>
+  </div>
+  <!-- 检查失败 -->
+  <div id="failedPanel" style="display: none;">
+    <div style="font-size: 3rem; margin-bottom: 0.5rem;">❌</div>
+    <p style="font-size: 1.1rem; font-weight: 500; color: #ef4444; margin-bottom: 0.5rem;">检查失败</p>
+    <p id="errorMessage" style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 1.5rem;"></p>
+    <a href="/documents/upload" class="btn btn-primary" style="justify-content: center;">🔄 重新上传</a>
   </div>
 </div>
 
@@ -53,20 +78,19 @@ const fileInfo = document.getElementById('fileInfo');
 const submitBtn = document.getElementById('submitBtn');
 const uploadForm = document.getElementById('uploadForm');
 const resultArea = document.getElementById('resultArea');
+const checkingPanel = document.getElementById('checkingPanel');
+const donePanel = document.getElementById('donePanel');
+const failedPanel = document.getElementById('failedPanel');
+const viewReportLink = document.getElementById('viewReportLink');
+const checkStatusHint = document.getElementById('checkStatusHint');
+const errorMessage = document.getElementById('errorMessage');
 
 // Click to select
 dropZone.addEventListener('click', () => fileInput.click());
 
 // Drag & drop
-dropZone.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  dropZone.classList.add('dragover');
-});
-
-dropZone.addEventListener('dragleave', () => {
-  dropZone.classList.remove('dragover');
-});
-
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('dragover'); });
 dropZone.addEventListener('drop', (e) => {
   e.preventDefault();
   dropZone.classList.remove('dragover');
@@ -75,25 +99,32 @@ dropZone.addEventListener('drop', (e) => {
     showFileInfo(fileInput.files[0]);
   }
 });
-
 fileInput.addEventListener('change', () => {
-  if (fileInput.files.length > 0) {
-    showFileInfo(fileInput.files[0]);
-  }
+  if (fileInput.files.length > 0) showFileInfo(fileInput.files[0]);
 });
 
 function showFileInfo(file) {
   const sizeMB = (file.size / 1024 / 1024).toFixed(2);
   fileInfo.style.display = 'block';
   fileInfo.innerHTML = `✅ 已选择: <strong>${file.name}</strong> (${sizeMB}MB)`;
-
-  if (file.size > 50 * 1024 * 1024) {
+  if (file.size > 50 * 1024 * 1024)
     fileInfo.innerHTML += '<br><span style="color: #dc2626;">⚠️ 文件超过 50MB 限制</span>';
-  }
-  if (!file.name.toLowerCase().endsWith('.docx')) {
+  if (!file.name.toLowerCase().endsWith('.docx'))
     fileInfo.innerHTML += '<br><span style="color: #dc2626;">⚠️ 仅支持 .docx 格式</span>';
-  }
 }
+
+function showPanel(panel) {
+  checkingPanel.style.display = panel === 'checking' ? '' : 'none';
+  donePanel.style.display = panel === 'done' ? '' : 'none';
+  failedPanel.style.display = panel === 'failed' ? '' : 'none';
+}
+
+const statusHints = [
+  '正在解析文档内容...',
+  '正在比对检查规则...',
+  'AI 正在逐条判定合规性...',
+  '即将完成，正在生成报告...',
+];
 
 uploadForm.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -101,26 +132,22 @@ uploadForm.addEventListener('submit', async (e) => {
   const formData = new FormData(uploadForm);
   const file = fileInput.files[0];
 
-  if (!file) {
-    alert('请先选择文件');
-    return;
-  }
-  if (!formData.get('doc_type_id')) {
-    alert('请选择文档类型');
-    return;
-  }
-  if (!file.name.toLowerCase().endsWith('.docx')) {
-    alert('仅支持 .docx 格式');
-    return;
-  }
-  if (file.size > 50 * 1024 * 1024) {
-    alert('文件大小不能超过 50MB');
-    return;
-  }
+  if (!file) { alert('请先选择文件'); return; }
+  if (!formData.get('doc_type_id')) { alert('请选择文档类型'); return; }
+  if (!file.name.toLowerCase().endsWith('.docx')) { alert('仅支持 .docx 格式'); return; }
+  if (file.size > 50 * 1024 * 1024) { alert('文件大小不能超过 50MB'); return; }
 
   submitBtn.disabled = true;
   submitBtn.textContent = '⏳ 上传中...';
   resultArea.style.display = 'block';
+  showPanel('checking');
+
+  // Rotate status hints
+  let hintIdx = 0;
+  const hintTimer = setInterval(() => {
+    hintIdx = (hintIdx + 1) % statusHints.length;
+    checkStatusHint.textContent = statusHints[hintIdx];
+  }, 4000);
 
   try {
     const resp = await fetch('/api/documents/upload', {
@@ -131,57 +158,56 @@ uploadForm.addEventListener('submit', async (e) => {
     const data = await resp.json();
 
     if (resp.ok) {
-      resultArea.innerHTML = `
-        <div class="alert alert-success">
-          ✅ 上传成功！文档已进入 AI 检查队列
-        </div>
-        <p>检查任务 ID: ${data.check_task_id}</p>
-        <div class="form-actions">
-          <a id="viewReportLink" href="/documents" class="btn btn-primary">查看报告</a>
-          <a href="/documents" class="btn">查看文档列表</a>
-        </div>
-      `;
+      checkStatusHint.textContent = '已提交到检查队列，正在等待执行...';
 
       // Poll for completion
       const taskId = data.check_task_id;
-      let reportId = null;
+      const docId = data.document_id;
       const pollInterval = setInterval(async () => {
         const statusResp = await fetch(`/api/documents/check-tasks/${taskId}/status`);
         const statusData = await statusResp.json();
+
         if (statusData.status === 'done') {
           clearInterval(pollInterval);
-          // Get report id
+          clearInterval(hintTimer);
+
+          let reportId = null;
           try {
-            const histResp = await fetch(`/api/documents/${data.document_id}/history`);
+            const histResp = await fetch(`/api/documents/${docId}/history`);
             const histData = await histResp.json();
             if (histData && histData.length > 0) {
               reportId = histData[0].report_id;
             }
           } catch(e) {}
-          resultArea.innerHTML += `
-            <div class="alert alert-success" style="margin-top: 1rem;">
-              ✅ AI 检查已完成！
-            </div>
-          `;
-          // Update the view report link
+
           if (reportId) {
-            document.getElementById('viewReportLink').href = `/reports/${reportId}`;
+            viewReportLink.href = `/reports/${reportId}`;
           }
+          showPanel('done');
+          submitBtn.disabled = false;
+          submitBtn.textContent = '🚀 开始检查';
         } else if (statusData.status === 'failed') {
           clearInterval(pollInterval);
-          resultArea.innerHTML += `
-            <div class="alert alert-error" style="margin-top: 1rem;">
-              ❌ 检查失败: ${statusData.error_message || '未知错误'}
-            </div>
-          `;
+          clearInterval(hintTimer);
+          errorMessage.textContent = statusData.error_message || 'AI 检查服务异常，请稍后重试';
+          showPanel('failed');
+          submitBtn.disabled = false;
+          submitBtn.textContent = '🚀 开始检查';
+        } else if (statusData.status === 'running') {
+          checkStatusHint.textContent = 'AI 正在逐条检查文档内容...';
         }
       }, 3000);
     } else {
-      resultArea.innerHTML = `<div class="alert alert-error">❌ ${data.detail || '上传失败'}</div>`;
+      clearInterval(hintTimer);
+      errorMessage.textContent = data.detail || '上传失败';
+      showPanel('failed');
+      submitBtn.disabled = false;
+      submitBtn.textContent = '🚀 开始检查';
     }
   } catch (err) {
-    resultArea.innerHTML = `<div class="alert alert-error">❌ 网络错误: ${err.message}</div>`;
-  } finally {
+    clearInterval(hintTimer);
+    errorMessage.textContent = '网络错误: ' + err.message;
+    showPanel('failed');
     submitBtn.disabled = false;
     submitBtn.textContent = '🚀 开始检查';
   }

@@ -68,7 +68,9 @@
     <button class="btn btn-success" onclick="submitConclusion('pass', '')">✅ 通过</button>
     <button class="btn btn-warning" onclick="showConclusionRemark('conditional_pass')">⚠️ 有条件通过</button>
     <button class="btn btn-danger" onclick="showConclusionRemark('fail')">❌ 不通过</button>
+    <button class="btn btn-primary" onclick="batchConfirmAll()" id="batchConfirmBtn" style="margin-left: auto;">⚡ 一键全部确认</button>
   </div>
+  <div id="batchConfirmStatus" style="margin-top: 0.5rem; font-size: 0.8rem; color: #64748b; display: none;"></div>
 </div>
 {% endif %}
 
@@ -278,6 +280,40 @@ confirmModal = function() {
     origConfirm();
   }
 };
+
+// ── 一键全部确认 ────────────────────────────────────────
+function batchConfirmAll() {
+  if (!confirm('确定将所有待审核的检查结果标记为「已确认」吗？')) return;
+
+  const btn = document.getElementById('batchConfirmBtn');
+  const status = document.getElementById('batchConfirmStatus');
+  btn.disabled = true;
+  btn.textContent = '⏳ 处理中...';
+  status.style.display = 'block';
+  status.textContent = '正在批量确认...';
+  status.style.color = '#64748b';
+
+  fetch(`/api/reviews/{{ report.id }}/batch-confirm`, { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.detail) {
+        status.textContent = '❌ ' + d.detail;
+        status.style.color = '#ef4444';
+        btn.disabled = false;
+        btn.textContent = '⚡ 一键全部确认';
+      } else {
+        status.textContent = '✅ 已批量确认 ' + d.count + ' 条检查结果，页面即将刷新...';
+        status.style.color = '#22c55e';
+        setTimeout(() => location.reload(), 1500);
+      }
+    })
+    .catch(e => {
+      status.textContent = '❌ 网络错误: ' + e.message;
+      status.style.color = '#ef4444';
+      btn.disabled = false;
+      btn.textContent = '⚡ 一键全部确认';
+    });
+}
 </script>
 
 <div class="form-actions" style="margin-top: 1.5rem;">

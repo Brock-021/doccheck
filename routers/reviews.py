@@ -169,3 +169,53 @@ async def conclude_report(
         "conclusion_label": conclusion_labels.get(data.conclusion),
         "remark": data.remark,
     }
+
+
+@router.post("/{report_id}/batch-confirm")
+async def batch_confirm_report(
+    report_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """一键全部通过：将当前报告中所有待审核(pending)的检查结果标记为已确认。"""
+    user = getattr(request.state, "current_user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    user_roles = user.get("role", "").split(",")
+    if "admin" not in user_roles and "reviewer" not in user_roles:
+        raise HTTPException(status_code=403, detail="权限不足")
+
+    # 获取报告关联的 check_task
+    result = await db.execute(select(Report).where(Report.id == report_id))
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail="报告不存在")
+
+    # 查找该 check_task 下所有 pending 的检查结果
+    pending_results = await db.execute(
+        select(CheckResult)
+        .where(CheckResult.check_task_id == report.check_task_id)
+        .where(CheckResult.review_status == "pending")
+    )
+    pending_list = pending_results.scalars().all()
+
+    if not pending_list:
+        return {"message": "没有待审核的检查结果", "count": 0}
+
+    now = datetime.utcnow()
+    for cr in pending_list:
+        cr.review_status = "confirmed"
+        cr.reviewer_id = user["user_id"]
+        cr.reviewed_at = now
+
+    await db.commit()
+
+    await log_action(db, user["user_id"], user["username"],
+                     "batch_confirm", "report", report_id,
+                     f"一键全部通过: 批量确认 {len(pending_list)} 条检查结果")
+
+    return {
+        "message": f"已批量确认 {len(pending_list)} 条检查结果",
+        "count": len(pending_list),
+    }

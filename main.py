@@ -158,9 +158,13 @@ async def dashboard_page(request: Request, db: AsyncSession = Depends(get_db)):
         doc_count = dc_result.scalar() or 0
 
         # Pending review count (only for reviewers/admin)
+        # 统计有待审核检查结果的报告数（至少有一条 check_result 的 review_status=pending）
         if "reviewer" in user_roles or "admin" in user_roles:
+            from sqlalchemy import distinct
             pr_result = await db.execute(
-                select(func.count(CheckResult.id))
+                select(func.count(distinct(Report.id)))
+                .join(CheckTask, Report.check_task_id == CheckTask.id)
+                .join(CheckResult, CheckResult.check_task_id == CheckTask.id)
                 .where(CheckResult.review_status == "pending")
             )
             pending_review = pr_result.scalar() or 0

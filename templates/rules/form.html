@@ -4,7 +4,7 @@
 
 {% block content %}
 <form method="post" action="/api/admin/rules{% if rule %}/{{ rule.id }}{% endif %}"
-      {% if rule %}onsubmit="return updateRule(event)"{% endif %}>
+      onsubmit="return handleRuleSubmit(event, {% if rule %}{{ rule.id }}{% else %}null{% endif %})">
   <input type="hidden" name="_method" value="{% if rule %}PUT{% else %}POST{% endif %}">
 
   <div class="form-group">
@@ -68,10 +68,9 @@
 </form>
 
 <script>
-async function updateRule(event) {
+async function handleRuleSubmit(event, ruleId) {
   event.preventDefault();
   const form = event.target;
-  const ruleId = {{ rule.id if rule else 0 }};
   const data = {
     name: form.name.value,
     doc_type_id: parseInt(form.doc_type_id.value),
@@ -82,8 +81,17 @@ async function updateRule(event) {
     is_active: form.is_active.checked,
   };
 
-  const resp = await fetch(`/api/admin/rules/${ruleId}`, {
-    method: 'PUT',
+  let url, method;
+  if (ruleId) {
+    url = `/api/admin/rules/${ruleId}`;
+    method = 'PUT';
+  } else {
+    url = '/api/admin/rules';
+    method = 'POST';
+  }
+
+  const resp = await fetch(url, {
+    method: method,
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(data),
   });
@@ -91,8 +99,12 @@ async function updateRule(event) {
   if (resp.ok) {
     window.location.href = '/admin/rules';
   } else {
-    const err = await resp.json();
-    alert(err.detail || '保存失败');
+    try {
+      const err = await resp.json();
+      alert(err.detail || '保存失败');
+    } catch {
+      alert('保存失败');
+    }
   }
 }
 </script>

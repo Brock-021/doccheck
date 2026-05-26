@@ -300,6 +300,70 @@ async def document_list_page(request: Request, db: AsyncSession = Depends(get_db
     })
 
 
+# ── Document history page ──────────────────────────────────
+
+@app.get("/documents/{doc_id}/history", response_class=HTMLResponse)
+async def document_history_page(request: Request, doc_id: int, db: AsyncSession = Depends(get_db)):
+    """文档检查历史页面。"""
+    user = request.state.current_user
+    if not user:
+        return RedirectResponse(url="/login")
+
+    from models import Document, DocType, CheckTask, Report
+    from sqlalchemy import select
+
+    # Get document
+    doc_result = await db.execute(select(Document).where(Document.id == doc_id))
+    doc = doc_result.scalar_one_or_none()
+    if not doc:
+        return HTMLResponse("文档不存在", status_code=404)
+
+    # Get doc type
+    dt_result = await db.execute(select(DocType).where(DocType.id == doc.doc_type_id))
+    dt = dt_result.scalar_one_or_none()
+
+    # Check ownership
+    user_roles = user.get("role", "").split(",")
+    if "admin" not in user_roles and doc.user_id != user["user_id"]:
+        return RedirectResponse(url="/documents")
+
+    # Get history
+    ct_result = await db.execute(
+        select(CheckTask).where(CheckTask.document_id == doc_id)
+        .order_by(CheckTask.created_at.desc())
+    )
+    tasks = ct_result.scalars().all()
+
+    history = []
+    for task in tasks:
+        rp_result = await db.execute(
+            select(Report).where(Report.check_task_id == task.id)
+        )
+        rp = rp_result.scalar_one_or_none()
+
+        history.append({
+            "check_task_id": task.id,
+            "report_id": rp.id if rp else None,
+            "stage": task.stage,
+            "rule_count": task.rule_count,
+            "status": task.status,
+            "created_at": task.created_at.strftime("%Y-%m-%d %H:%M") if task.created_at else "",
+            "completed_at": task.completed_at.strftime("%Y-%m-%d %H:%M") if task.completed_at else "",
+            "conclusion": rp.conclusion if rp else None,
+        })
+
+    return templates.TemplateResponse(request, "documents/history.html", {
+        "current_user": user,
+        "document": {
+            "id": doc.id,
+            "filename": doc.original_filename or doc.filename,
+            "doc_type_name": dt.name if dt else "-",
+            "upload_time": doc.upload_time.strftime("%Y-%m-%d %H:%M") if doc.upload_time else "",
+        },
+        "history": history,
+    })
+
+
 # ── Report detail page ────────────────────────────────────────
 
 @app.get("/reports/{report_id}", response_class=HTMLResponse)

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}检查历史 - DocCheck{% endblock %}
+{% block page_title %}📋 检查历史{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <h3 style="margin-bottom: 0.25rem;">{{ document.filename }}</h3>
+      <div style="font-size: 0.875rem; color: #64748b;">
+        文档类型：{{ document.doc_type_name }} | 上传时间：{{ document.upload_time }}
+      </div>
+    </div>
+    <a href="/documents" class="btn btn-sm">← 返回列表</a>
+  </div>
+</div>
+
+{% if history %}
+<table>
+  <thead>
+    <tr>
+      <th>检查时间</th>
+      <th>阶段</th>
+      <th>规则数</th>
+      <th>结论</th>
+      <th>状态</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for h in history %}
+    <tr>
+      <td style="white-space: nowrap;">{{ h.created_at }}</td>
+      <td><span class="badge badge-neutral">{{ {'initial': '初检', 'final': '终检', 'all': '通用'}.get(h.stage, h.stage) }}</span></td>
+      <td>{{ h.rule_count }}</td>
+      <td>
+        {% if h.conclusion == 'pass' %}
+        <span class="badge badge-success">✅ 通过</span>
+        {% elif h.conclusion == 'conditional_pass' %}
+        <span class="badge badge-warning">⚠️ 有条件通过</span>
+        {% elif h.conclusion == 'fail' %}
+        <span class="badge badge-danger">❌ 不通过</span>
+        {% else %}
+        <span class="badge badge-neutral">⏳ 待审核</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if h.status == 'done' %}
+        <span class="badge badge-success">已完成</span>
+        {% elif h.status == 'running' %}
+        <span class="badge badge-info">检查中</span>
+        {% elif h.status == 'failed' %}
+        <span class="badge badge-danger">失败</span>
+        {% else %}
+        <span class="badge badge-neutral">待检查</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if h.report_id %}
+        <a href="/reports/{{ h.report_id }}" class="btn btn-sm">查看报告</a>
+        {% else %}
+        <span class="badge badge-neutral">无报告</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <p>📄 该文档暂无检查历史</p>
+  <a href="/documents/upload" class="btn btn-primary">重新检查</a>
+</div>
+{% endif %}
+{% endblock %}

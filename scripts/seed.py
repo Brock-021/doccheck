@@ -35,7 +35,7 @@ async def seed():
         users_data = [
             ('admin', 'admin123', '系统管理员', 'admin'),
             ('reviewer', 'review123', '文档审核员', 'reviewer'),
-            ('zhangsan', 'doc123456', '张三', 'user'),
+            ('zhangsan', 'zhangsan', '张三', 'user'),
             ('lisi', 'doc123456', '李四', 'user'),
             ('writer', 'writer123', '文档编写员', 'user'),
         ]

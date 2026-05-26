@@ -4,6 +4,7 @@ DocCheck AI 检查引擎
 批量检查模式：将文档全文 + 全部规则一次发给 LLM，返回结构化结果。
 """
 
+from __future__ import annotations
 import json
 import asyncio
 import logging

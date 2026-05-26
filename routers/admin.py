@@ -1,5 +1,6 @@
 """DocCheck routes - 管理员模块（用户管理 + LLM配置 + 审计日志）"""
 
+from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Query

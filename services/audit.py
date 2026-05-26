@@ -2,6 +2,7 @@
 DocCheck 审计日志服务
 """
 
+from __future__ import annotations
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select

@@ -1,5 +1,6 @@
 """DocCheck routes - 规则管理 + 文档类型管理"""
 
+from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession

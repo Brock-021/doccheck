@@ -575,6 +575,19 @@ async def admin_llm_config_page(request: Request):
     })
 
 
+# ── Admin: Doc types page ────────────────────────────
+
+@app.get("/admin/doc-types", response_class=HTMLResponse)
+async def admin_doc_types_page(request: Request):
+    """文档类型管理页面。"""
+    user = request.state.current_user
+    if not user or "admin" not in user.get("role", "").split(","):
+        return RedirectResponse(url="/login")
+    return templates.TemplateResponse(request, "admin/doc_types.html", {
+        "current_user": user,
+    })
+
+
 # ── Admin: Audit log page ──────────────────────────────
 
 @app.get("/admin/audit-log", response_class=HTMLResponse)

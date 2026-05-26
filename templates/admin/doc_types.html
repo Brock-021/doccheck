@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}文档类型管理 - DocCheck{% endblock %}
+{% block page_title %}📂 文档类型管理{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+  <div></div>
+  <button class="btn btn-primary btn-sm" onclick="showAddDocType()">➕ 新增文档类型</button>
+</div>
+
+<table id="docTypeTable">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>名称</th>
+      <th>排序</th>
+      <th>关联规则数</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody id="docTypeTableBody">
+    <tr><td colspan="5" style="text-align: center; color: #94a3b8;">加载中...</td></tr>
+  </tbody>
+</table>
+
+<div id="modalOverlay" class="modal-overlay" style="display: none;" onclick="closeDocTypeModal()"></div>
+<div id="docTypeModal" class="modal" style="display: none;">
+  <div class="modal-content">
+    <h4 id="docTypeModalTitle">新增文档类型</h4>
+    <input type="hidden" id="editDocTypeId" value="">
+    <div class="form-group">
+      <label>名称</label>
+      <input type="text" id="formName" class="form-control" placeholder="如：管理制度、技术方案">
+    </div>
+    <div class="form-group">
+      <label>排序号</label>
+      <input type="number" id="formSortOrder" class="form-control" value="0" min="0">
+    </div>
+    <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+      <button id="modalSaveBtn" class="btn btn-primary" onclick="saveDocType()">保存</button>
+      <button class="btn" onclick="closeDocTypeModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+{% raw %}
+<script>
+async function loadDocTypes() {
+  try {
+    const resp = await fetch('/api/admin/doc-types');
+    const types = await resp.json();
+    const tbody = document.getElementById('docTypeTableBody');
+    tbody.innerHTML = types.map(t => `<tr>
+      <td>${t.id}</td>
+      <td>${t.name}</td>
+      <td>${t.sort_order}</td>
+      <td>${t.rule_count}</td>
+      <td>
+        <button class="btn btn-sm" onclick="editDocType(${t.id},'${t.name}',${t.sort_order})">编辑</button>
+        <button class="btn btn-sm btn-warning" onclick="deleteDocType(${t.id})">删除</button>
+      </td>
+    </tr>`).join('');
+  } catch (e) {
+    document.getElementById('docTypeTableBody').innerHTML = `<tr><td colspan="5" style="text-align: center; color: #ef4444;">加载失败: ${e.message}</td></tr>`;
+  }
+}
+
+function showAddDocType() {
+  document.getElementById('docTypeModalTitle').textContent = '新增文档类型';
+  document.getElementById('editDocTypeId').value = '';
+  document.getElementById('formName').value = '';
+  document.getElementById('formSortOrder').value = '0';
+  document.getElementById('docTypeModal').style.display = 'block';
+  document.getElementById('modalOverlay').style.display = 'block';
+}
+
+function editDocType(id, name, sortOrder) {
+  document.getElementById('docTypeModalTitle').textContent = '编辑文档类型';
+  document.getElementById('editDocTypeId').value = id;
+  document.getElementById('formName').value = name;
+  document.getElementById('formSortOrder').value = sortOrder;
+  document.getElementById('docTypeModal').style.display = 'block';
+  document.getElementById('modalOverlay').style.display = 'block';
+}
+
+function closeDocTypeModal() {
+  document.getElementById('docTypeModal').style.display = 'none';
+  document.getElementById('modalOverlay').style.display = 'none';
+}
+
+async function saveDocType() {
+  const id = document.getElementById('editDocTypeId').value;
+  const data = {
+    name: document.getElementById('formName').value,
+    sort_order: parseInt(document.getElementById('formSortOrder').value) || 0,
+  };
+  if (!data.name) { alert('请输入文档类型名称'); return; }
+
+  try {
+    let resp;
+    if (id) {
+      resp = await fetch(`/api/admin/doc-types/${id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data),
+      });
+    } else {
+      resp = await fetch('/api/admin/doc-types', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data),
+      });
+    }
+    if (resp.ok) {
+      closeDocTypeModal();
+      loadDocTypes();
+    } else {
+      const err = await resp.json();
+      alert(err.detail || '操作失败');
+    }
+  } catch (e) {
+    alert('网络错误: ' + e.message);
+  }
+}
+
+async function deleteDocType(id) {
+  if (!confirm('确定要删除此文档类型吗？如果有关联规则将无法删除。')) return;
+  try {
+    const resp = await fetch(`/api/admin/doc-types/${id}`, {method: 'DELETE'});
+    if (resp.ok) {
+      loadDocTypes();
+    } else {
+      const err = await resp.json();
+      alert(err.detail || '删除失败');
+    }
+  } catch (e) {
+    alert('网络错误: ' + e.message);
+  }
+}
+
+loadDocTypes();
+</script>
+{% endraw %}
+{% endblock %}

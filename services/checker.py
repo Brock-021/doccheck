@@ -232,11 +232,19 @@ async def run_check(
             else:
                 unknown += 1
 
-        # 7. Create report
+        # 7. Create report with auto conclusion
         total = len(matched_rules)
         pass_rate = round(passed / total * 100, 1) if total > 0 else 0
+        # Auto determine conclusion
+        if failed > 0:
+            conclusion = "fail"
+        elif unknown > 0:
+            conclusion = "conditional_pass"
+        else:
+            conclusion = "pass"
         report = Report(
             check_task_id=check_task.id,
+            conclusion=conclusion,
             summary_json={
                 "total_rules": total,
                 "passed": passed,

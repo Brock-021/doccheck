@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}存储管理 - DocCheck{% endblock %}
+{% block page_title %}💾 存储管理{% endblock %}
+
+{% block content %}
+<style>
+.storage-container { max-width: 900px; }
+.info-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.info-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; text-align: center; }
+.info-card .num { font-size: 1.8rem; font-weight: 700; line-height: 1.2; }
+.info-card .label { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem; }
+
+.cleanup-section { margin-top: 1.5rem; }
+.cleanup-options { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.cleanup-btn { padding: 0.6rem 1.2rem; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 0.9rem; background: var(--bg-card); transition: all 0.15s; text-align: center; min-width: 120px; }
+.cleanup-btn:hover { border-color: #ef4444; background: #fef2f2; }
+.cleanup-btn .num { display: block; font-size: 1.4rem; font-weight: 700; color: #ef4444; }
+.cleanup-btn .desc { font-size: 0.75rem; color: var(--text-secondary); }
+.cleanup-btn.disabled { opacity: 0.4; cursor: not-allowed; }
+.cleanup-btn.disabled:hover { border-color: var(--border); background: var(--bg-card); }
+
+.progress-bar { display: none; margin: 1rem 0; }
+.progress-bar.active { display: block; }
+.progress-track { height: 8px; background: var(--bg-main); border-radius: 4px; overflow: hidden; }
+.progress-fill { height: 100%; background: #3b82f6; border-radius: 4px; width: 0; transition: width 0.3s; }
+.progress-text { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem; text-align: center; }
+
+.result-box { display: none; margin-top: 1rem; padding: 1rem; border-radius: 8px; }
+.result-box.success { display: block; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+.result-box.error { display: block; background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+.result-box.info { display: block; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+
+.danger-zone { margin-top: 2rem; padding: 1.25rem; border: 2px solid #fecaca; border-radius: 10px; background: #fef2f2; }
+.danger-zone h3 { color: #dc2626; margin-bottom: 0.5rem; }
+.danger-zone p { font-size: 0.85rem; color: #991b1b; margin-bottom: 0.75rem; }
+.loading { text-align: center; padding: 2rem; color: var(--text-secondary); }
+</style>
+
+<div class="storage-container">
+  <div class="info-cards" id="infoCards">
+    <div class="loading">⏳ 加载中...</div>
+  </div>
+
+  <div class="cleanup-section">
+    <h3 style="margin-bottom: 0.75rem;">🧹 清理旧文档</h3>
+    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">
+      选择要清理的时间范围，系统将删除指定天数之前的文档及其关联的检查任务、报告和物理文件。
+      此操作<strong>不可恢复</strong>，请谨慎操作。
+    </p>
+
+    <div class="cleanup-options" id="cleanupOptions">
+      <div class="loading">⏳ 加载中...</div>
+    </div>
+
+    <div class="progress-bar" id="progressBar">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-text" id="progressText"></div>
+    </div>
+
+    <div class="result-box" id="resultBox"></div>
+  </div>
+
+  <div class="danger-zone">
+    <h3>⚠️ 磁盘使用注意事项</h3>
+    <p>
+      上传的文档原件保存在 <code>uploads/</code> 目录。每次上传的 .docx 文件都会保留在磁盘上。
+      建议定期清理（如每季度一次），或在上传后确认检查结果无误后及时清理旧文档。
+    </p>
+  </div>
+</div>
+
+<script>
+function loadStorageInfo() {
+  fetch('/api/admin/storage/info')
+    .then(r => r.json())
+    .then(data => {
+      renderInfo(data);
+      renderCleanupOptions(data);
+    })
+    .catch(e => {
+      document.getElementById('infoCards').innerHTML = '<div class="error-msg">❌ 加载失败: ' + e.message + '</div>';
+      document.getElementById('cleanupOptions').innerHTML = '<div class="error-msg">加载失败</div>';
+    });
+}
+
+function renderInfo(data) {
+  const cards = [
+    { num: data.total_documents, label: '📄 文档记录', color: '#3b82f6' },
+    { num: data.uploads_count, label: '📁 存储文件数', color: '#8b5cf6' },
+    { num: data.uploads_size_human, label: '💾 已用空间', color: '#f59e0b' },
+  ];
+  document.getElementById('infoCards').innerHTML = cards.map(c =>
+    `<div class="info-card"><div class="num" style="color:${c.color}">${c.num}</div><div class="label">${c.label}</div></div>`
+  ).join('');
+}
+
+function renderCleanupOptions(data) {
+  const old = data.old_documents;
+  const opts = [
+    { days: 30, count: old.days_30.count, label: '30天前' },
+    { days: 60, count: old.days_60.count, label: '60天前' },
+    { days: 90, count: old.days_90.count, label: '90天前' },
+    { days: 180, count: old.days_180.count, label: '180天前' },
+  ];
+  document.getElementById('cleanupOptions').innerHTML = opts.map(o =>
+    `<div class="cleanup-btn ${o.count === 0 ? 'disabled' : ''}" onclick="${o.count > 0 ? `confirmCleanup(${o.days})` : ''}" title="${o.count === 0 ? '没有符合条件的文档' : ''}">
+      <span class="num">${o.count}</span>
+      <span class="desc">${o.label}的文档</span>
+      <div style="font-size: 0.7rem; color: #64748b; margin-top: 0.25rem;">点击清理</div>
+    </div>`
+  ).join('');
+}
+
+function confirmCleanup(days) {
+  const label = {30:'30天',60:'60天',90:'90天',180:'180天'}[days] || days + '天';
+  if (!confirm(`确定要删除所有 ${label} 之前的文档吗？\n\n此操作将删除文档记录、关联的检查任务、报告及磁盘上的文件。\n\n⚠️ 此操作不可恢复！`)) return;
+
+  const pb = document.getElementById('progressBar');
+  const fill = document.getElementById('progressFill');
+  const text = document.getElementById('progressText');
+  const result = document.getElementById('resultBox');
+  pb.classList.add('active');
+  result.className = 'result-box';
+  result.style.display = 'none';
+  fill.style.width = '30%';
+  text.textContent = '正在清理...';
+  text.style.color = '#64748b';
+
+  fetch(`/api/admin/storage/cleanup?days=${days}`, { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      fill.style.width = '100%';
+      if (data.detail) {
+        result.className = 'result-box error';
+        result.textContent = '❌ ' + data.detail;
+      } else {
+        result.className = 'result-box success';
+        result.innerHTML = `✅ ${data.message}。共删除 ${data.deleted} 个文档，释放磁盘空间 ${data.space_freed_human}。`;
+      }
+      result.style.display = 'block';
+      setTimeout(() => {
+        pb.classList.remove('active');
+        fill.style.width = '0';
+        loadStorageInfo();
+      }, 2000);
+    })
+    .catch(e => {
+      fill.style.width = '0';
+      pb.classList.remove('active');
+      result.className = 'result-box error';
+      result.textContent = '❌ 清理失败: ' + e.message;
+      result.style.display = 'block';
+    });
+}
+
+document.addEventListener('DOMContentLoaded', loadStorageInfo);
+</script>
+{% endblock %}

@@ -60,7 +60,15 @@
         <td>{{ doc.last_check_time or doc.upload_time }}</td>
         <td>
           {% if doc.last_check_status == 'done' %}
-          <span class="badge badge-success">已完成</span>
+            {% if doc.last_report_conclusion == 'fail' %}
+            <span class="badge badge-danger">❌ 不通过</span>
+            {% elif doc.last_report_conclusion == 'conditional_pass' %}
+            <span class="badge badge-warning">⚠️ 有条件通过</span>
+            {% elif doc.last_report_conclusion == 'pass' %}
+            <span class="badge badge-success">✅ 通过</span>
+            {% else %}
+            <span class="badge badge-success">已完成</span>
+            {% endif %}
           {% elif doc.last_check_status == 'running' %}
           <span class="badge badge-info">检查中</span>
           {% elif doc.last_check_status == 'failed' %}

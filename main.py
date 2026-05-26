@@ -192,18 +192,21 @@ async def dashboard_page(request: Request, db: AsyncSession = Depends(get_db)):
             ct = ct_result.scalar_one_or_none()
 
             report_id = None
+            report_conclusion = None
             if ct:
                 rp_result = await db.execute(
                     select(Report).where(Report.check_task_id == ct.id)
                 )
                 rp = rp_result.scalar_one_or_none()
                 report_id = rp.id if rp else None
+                report_conclusion = rp.conclusion if rp else None
 
             recent_docs.append({
                 "filename": doc.original_filename or doc.filename,
                 "doc_type_name": dt.name if dt else "-",
                 "last_check_time": ct.created_at.strftime("%Y-%m-%d %H:%M") if ct else doc.upload_time.strftime("%Y-%m-%d %H:%M"),
                 "last_check_status": ct.status if ct else None,
+                "last_report_conclusion": report_conclusion,
                 "last_report_id": report_id,
                 "upload_time": doc.upload_time,
             })
@@ -295,11 +298,15 @@ async def report_detail_page(request: Request, report_id: int, db: AsyncSession 
     for r in results:
         rule_result = await db.execute(select(Rule).where(Rule.id == r.rule_id))
         rule = rule_result.scalar_one_or_none()
+        # 将 compliant 从字符串转为布尔值，避免 'false' 字符串被当作真值
+        compliant_bool = r.compliant
+        if isinstance(compliant_bool, str):
+            compliant_bool = compliant_bool.lower() == "true"
         results_data.append({
             "id": r.id,
             "rule_name": rule.name if rule else "未知规则",
             "severity": rule.severity if rule else "must_fix",
-            "compliant": r.compliant,
+            "compliant": compliant_bool,
             "issue": r.issue,
             "location": r.location,
             "original_text": r.original_text,
@@ -456,11 +463,15 @@ async def review_page(request: Request, report_id: int, db: AsyncSession = Depen
     for r in results:
         rule_result = await db.execute(select(Rule).where(Rule.id == r.rule_id))
         rule = rule_result.scalar_one_or_none()
+        # 将 compliant 从字符串转为布尔值，避免 'false' 字符串被当作真值
+        compliant_bool = r.compliant
+        if isinstance(compliant_bool, str):
+            compliant_bool = compliant_bool.lower() == "true"
         results_data.append({
             "id": r.id,
             "rule_name": rule.name if rule else "未知规则",
             "severity": rule.severity if rule else "must_fix",
-            "compliant": r.compliant,
+            "compliant": compliant_bool,
             "issue": r.issue,
             "location": r.location,
             "original_text": r.original_text,
@@ -469,8 +480,8 @@ async def review_page(request: Request, report_id: int, db: AsyncSession = Depen
             "review_remark": r.review_remark,
         })
 
-    passed = sum(1 for r in results_data if r["compliant"] == "true")
-    failed = sum(1 for r in results_data if r["compliant"] != "true")
+    passed = sum(1 for r in results_data if r["compliant"])
+    failed = sum(1 for r in results_data if not r["compliant"])
     confirmed = sum(1 for r in results_data if r["review_status"] == "confirmed")
     rejected = sum(1 for r in results_data if r["review_status"] == "rejected")
 

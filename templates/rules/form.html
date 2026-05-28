@@ -17,7 +17,7 @@
     <label>文档类型 *（可多选）</label>
     <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem;">
       {% for dt in doc_types %}
-      <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.25rem; padding: 0.375rem 0.75rem; border: 1px solid #334155; border-radius: 6px; cursor: pointer; background: #1e293b;">
+      <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.25rem; padding: 0.375rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; background: #f8fafc; color: #1e293b;">
         <input type="checkbox" name="doc_type_ids" value="{{ dt.id }}"
                {% if rule and dt.id in rule.doc_type_ids %}checked{% endif %}
                style="accent-color: #6366f1;">

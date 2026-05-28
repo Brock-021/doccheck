@@ -15,7 +15,11 @@
 
   <div class="form-group">
     <label>文档类型 *（可多选）</label>
-    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem;">
+    <div style="margin-bottom: 0.5rem;">
+      <button type="button" class="btn btn-xs" onclick="selectAllDocTypes(true)" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">✅ 一键关联</button>
+      <button type="button" class="btn btn-xs" onclick="selectAllDocTypes(false)" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">🔄 反选</button>
+    </div>
+    <div id="docTypeCheckboxes" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem;">
       {% for dt in doc_types %}
       <label class="checkbox-label" style="display: flex; align-items: center; gap: 0.25rem; padding: 0.375rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; cursor: pointer; background: #f8fafc; color: #1e293b;">
         <input type="checkbox" name="doc_type_ids" value="{{ dt.id }}"
@@ -70,6 +74,17 @@
 </form>
 
 <script>
+function selectAllDocTypes(selectAll) {
+  const cbs = document.querySelectorAll('#docTypeCheckboxes input[name="doc_type_ids"]');
+  cbs.forEach(cb => {
+    if (selectAll) {
+      cb.checked = true;
+    } else {
+      cb.checked = !cb.checked;
+    }
+  });
+}
+
 async function handleRuleSubmit(event, ruleId) {
   event.preventDefault();
   const form = event.target;

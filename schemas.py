@@ -29,11 +29,13 @@ class LoginResponse(BaseModel):
 class DocTypeCreate(BaseModel):
     name: str
     sort_order: int = 0
+    rule_ids: Optional[list[int]] = None
 
 
 class DocTypeUpdate(BaseModel):
     name: Optional[str] = None
     sort_order: Optional[int] = None
+    rule_ids: Optional[list[int]] = None
 
 
 class DocTypeResponse(BaseModel):
@@ -41,6 +43,7 @@ class DocTypeResponse(BaseModel):
     name: str
     sort_order: int
     rule_count: Optional[int] = 0
+    rule_ids: Optional[list[int]] = None
 
     class Config:
         from_attributes = True

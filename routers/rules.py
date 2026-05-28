@@ -64,7 +64,7 @@ async def list_doc_types(db: AsyncSession = Depends(get_db)):
         select(DocType).order_by(DocType.sort_order)
     )
     types = result.scalars().all()
-    # Attach rule count via association table
+    # Attach rule count and rule_ids via association table
     resp = []
     for t in types:
         count_result = await db.execute(
@@ -73,9 +73,16 @@ async def list_doc_types(db: AsyncSession = Depends(get_db)):
             )
         )
         rule_count = count_result.scalar() or 0
+        # Get associated rule ids
+        rule_ids_result = await db.execute(
+            select(rule_doc_types.c.rule_id).where(
+                rule_doc_types.c.doc_type_id == t.id
+            )
+        )
+        rule_ids = [row[0] for row in rule_ids_result.all()]
         resp.append(DocTypeResponse(
             id=t.id, name=t.name, sort_order=t.sort_order,
-            rule_count=rule_count,
+            rule_count=rule_count, rule_ids=rule_ids,
         ))
     return resp
 
@@ -95,10 +102,22 @@ async def create_doc_type(
 
     doc_type = DocType(name=data.name, sort_order=data.sort_order)
     db.add(doc_type)
+    await db.flush()
+
+    if data.rule_ids:
+        for rid in data.rule_ids:
+            r_result = await db.execute(select(Rule).where(Rule.id == rid))
+            if not r_result.scalar_one_or_none():
+                raise HTTPException(status_code=404, detail=f"规则 {rid} 不存在")
+            await db.execute(
+                rule_doc_types.insert().values(rule_id=rid, doc_type_id=doc_type.id)
+            )
+
     await db.commit()
     await db.refresh(doc_type)
     return DocTypeResponse(id=doc_type.id, name=doc_type.name,
-                           sort_order=doc_type.sort_order, rule_count=0)
+                           sort_order=doc_type.sort_order, rule_count=len(data.rule_ids or []),
+                           rule_ids=data.rule_ids or [])
 
 
 @router.put("/doc-types/{type_id}", response_model=DocTypeResponse)
@@ -124,6 +143,23 @@ async def update_doc_type(
     if data.sort_order is not None:
         doc_type.sort_order = data.sort_order
 
+    # Sync associated rules if rule_ids provided
+    if data.rule_ids is not None:
+        # Verify all rule ids exist
+        for rid in data.rule_ids:
+            r_result = await db.execute(select(Rule).where(Rule.id == rid))
+            if not r_result.scalar_one_or_none():
+                raise HTTPException(status_code=404, detail=f"规则 {rid} 不存在")
+        # Remove old associations
+        await db.execute(
+            delete(rule_doc_types).where(rule_doc_types.c.doc_type_id == type_id)
+        )
+        # Insert new associations
+        for rid in data.rule_ids:
+            await db.execute(
+                rule_doc_types.insert().values(rule_id=rid, doc_type_id=type_id)
+            )
+
     await db.commit()
     await db.refresh(doc_type)
 
@@ -132,9 +168,17 @@ async def update_doc_type(
             rule_doc_types.c.doc_type_id == type_id,
         )
     )
+    rule_count = count_result.scalar() or 0
+
+    rule_ids_result = await db.execute(
+        select(rule_doc_types.c.rule_id).where(
+            rule_doc_types.c.doc_type_id == type_id
+        )
+    )
+    rule_ids = [row[0] for row in rule_ids_result.all()]
     return DocTypeResponse(id=doc_type.id, name=doc_type.name,
                            sort_order=doc_type.sort_order,
-                           rule_count=count_result.scalar() or 0)
+                           rule_count=rule_count, rule_ids=rule_ids)
 
 
 @router.delete("/doc-types/{type_id}")

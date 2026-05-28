@@ -195,10 +195,11 @@ async def delete_doc_type(type_id: int, db: AsyncSession = Depends(get_db)):
             rule_doc_types.c.doc_type_id == type_id,
         )
     )
-    if count_result.scalar() > 0:
+    rule_count = count_result.scalar() or 0
+    if rule_count > 0:
         raise HTTPException(
             status_code=409,
-            detail=f"该文档类型下还有 {count_result.scalar()} 条规则，请先处理规则再删除",
+            detail=f"该文档类型下还有 {rule_count} 条规则，请先处理规则再删除",
         )
 
     await db.delete(doc_type)

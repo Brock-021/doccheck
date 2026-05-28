@@ -38,7 +38,7 @@ except ImportError:
 sys.path.insert(0, '.')
 
 from database import init_db, async_session_factory
-from models import User, DocType, Rule, SystemConfig
+from models import User, DocType, Rule, SystemConfig, rule_doc_types
 from sqlalchemy import select
 
 
@@ -106,15 +106,29 @@ async def seed():
         ]
 
         for doc_type_name, name, desc, severity, stage, sort in rules_data:
-            exists = await db.execute(select(Rule).where(Rule.name == name, Rule.doc_type_id == dts[doc_type_name].id))
+            exists = await db.execute(
+                select(Rule).where(Rule.name == name)
+                .join(rule_doc_types, rule_doc_types.c.rule_id == Rule.id)
+                .where(
+                    rule_doc_types.c.doc_type_id == dts[doc_type_name].id,
+                    Rule.name == name,
+                )
+            )
             if not exists.scalar_one_or_none():
-                db.add(Rule(
+                rule = Rule(
                     name=name, description=desc,
                     severity=severity, stage=stage,
-                    doc_type_id=dts[doc_type_name].id,
                     sort_order=sort,
                     is_active=True,
-                ))
+                )
+                db.add(rule)
+                await db.flush()
+                # Insert association
+                await db.execute(
+                    rule_doc_types.insert().values(
+                        rule_id=rule.id, doc_type_id=dts[doc_type_name].id
+                    )
+                )
 
         await db.commit()
         print(f"  ✅ 规则: {len(rules_data)} 条")

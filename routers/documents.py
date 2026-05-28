@@ -10,7 +10,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import Document, DocType, CheckTask, CheckResult, Report, Rule, SystemConfig
+from models import Document, DocType, CheckTask, CheckResult, Report, Rule, SystemConfig, rule_doc_types
 from schemas import DocumentResponse, CheckTaskResponse, CheckResultResponse
 from services.doc_parser import parse_docx
 from services.checker import run_check
@@ -66,9 +66,11 @@ async def upload_document(
     db.add(doc)
     await db.flush()
 
-    # Count enabled rules for this doc type and stage
-    rule_query = select(func.count(Rule.id)).where(
-        Rule.doc_type_id == doc_type_id,
+    # Count enabled rules for this doc type and stage (via association table)
+    rule_query = select(func.count(Rule.id)).select_from(Rule).join(
+        rule_doc_types, rule_doc_types.c.rule_id == Rule.id
+    ).where(
+        rule_doc_types.c.doc_type_id == doc_type_id,
         Rule.is_active == True,
         Rule.is_deprecated == False,
     )

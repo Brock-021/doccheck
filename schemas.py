@@ -49,7 +49,7 @@ class DocTypeResponse(BaseModel):
 # ── Rule ──────────────────────────────────────────────────
 
 class RuleCreate(BaseModel):
-    doc_type_id: int
+    doc_type_ids: list[int]
     name: str
     description: str = ""
     severity: str = "must_fix"
@@ -59,7 +59,7 @@ class RuleCreate(BaseModel):
 
 
 class RuleUpdate(BaseModel):
-    doc_type_id: Optional[int] = None
+    doc_type_ids: Optional[list[int]] = None
     name: Optional[str] = None
     description: Optional[str] = None
     severity: Optional[str] = None
@@ -70,8 +70,8 @@ class RuleUpdate(BaseModel):
 
 class RuleResponse(BaseModel):
     id: int
-    doc_type_id: int
-    doc_type_name: Optional[str] = None
+    doc_type_ids: Optional[list[int]] = None
+    doc_type_names: Optional[list[str]] = None
     name: str
     description: str
     severity: str

@@ -480,7 +480,7 @@ async def admin_rules_page(request: Request, db: AsyncSession = Depends(get_db))
     user = request.state.current_user
     if not user or "admin" not in user.get("role", "").split(","):
         return RedirectResponse(url="/login")
-    from models import DocType, Rule
+    from models import DocType, Rule, rule_doc_types
     from sqlalchemy import select
 
     # 查询所有文档类型
@@ -491,23 +491,34 @@ async def admin_rules_page(request: Request, db: AsyncSession = Depends(get_db))
     doc_type_id = request.query_params.get("doc_type_id")
     query = select(Rule).where(Rule.is_deprecated == False)
     if doc_type_id:
-        query = query.where(Rule.doc_type_id == int(doc_type_id))
+        query = query.join(rule_doc_types).where(
+            rule_doc_types.c.doc_type_id == int(doc_type_id),
+            rule_doc_types.c.rule_id == Rule.id,
+        )
     query = query.order_by(Rule.created_at.desc())
     rule_result = await db.execute(query)
     rules = rule_result.scalars().all()
 
     rules_data = []
     for r in rules:
-        dt_name = None
-        for dt in doc_types:
-            if dt.id == r.doc_type_id:
-                dt_name = dt.name
-                break
+        # Get all associated doc type names
+        dt_ids_result = await db.execute(
+            select(rule_doc_types.c.doc_type_id).where(
+                rule_doc_types.c.rule_id == r.id
+            )
+        )
+        dt_ids = [row[0] for row in dt_ids_result.all()]
+        dt_names = []
+        for dt_id in dt_ids:
+            dt = next((t for t in doc_types if t.id == dt_id), None)
+            if dt:
+                dt_names.append(dt.name)
+        doc_type_name = "、".join(dt_names) if dt_names else "未知"
         rules_data.append({
             "id": r.id,
             "name": r.name,
             "description": r.description,
-            "doc_type_name": dt_name or "未知",
+            "doc_type_name": doc_type_name,
             "severity": r.severity,
             "stage": r.stage,
             "sort_order": r.sort_order,
@@ -685,7 +696,7 @@ async def admin_rules_edit_page(request: Request, rule_id: int, db: AsyncSession
     user = request.state.current_user
     if not user or "admin" not in user.get("role", "").split(","):
         return RedirectResponse(url="/login")
-    from models import Rule, DocType
+    from models import Rule, DocType, rule_doc_types
     from sqlalchemy import select
     r_result = await db.execute(select(Rule).where(Rule.id == rule_id))
     rule = r_result.scalar_one_or_none()
@@ -693,6 +704,13 @@ async def admin_rules_edit_page(request: Request, rule_id: int, db: AsyncSession
         return RedirectResponse(url="/admin/rules")
     dt_result = await db.execute(select(DocType).order_by(DocType.sort_order))
     doc_types = dt_result.scalars().all()
+    # Get associated doc type ids
+    dt_ids_result = await db.execute(
+        select(rule_doc_types.c.doc_type_id).where(
+            rule_doc_types.c.rule_id == rule.id
+        )
+    )
+    rule_doc_type_ids = [row[0] for row in dt_ids_result.all()]
     return templates.TemplateResponse(request, "rules/form.html", {
         "current_user": user,
         "doc_types": [{"id": t.id, "name": t.name} for t in doc_types],
@@ -700,7 +718,7 @@ async def admin_rules_edit_page(request: Request, rule_id: int, db: AsyncSession
             "id": rule.id,
             "name": rule.name,
             "description": rule.description,
-            "doc_type_id": rule.doc_type_id,
+            "doc_type_ids": rule_doc_type_ids,
             "severity": rule.severity,
             "stage": rule.stage,
             "sort_order": rule.sort_order,

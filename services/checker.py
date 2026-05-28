@@ -14,7 +14,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import CheckTask, CheckResult, Report, Rule, DocType
+from models import CheckTask, CheckResult, Report, Rule, DocType, rule_doc_types
 from services.doc_parser import parse_docx
 
 logger = logging.getLogger("doccheck.checker")
@@ -111,10 +111,12 @@ async def run_check(
         # 2. Parse document
         parsed = parse_docx(document.file_path)
 
-        # 3. Get rules
+        # 3. Get rules via association table
         rule_result = await db.execute(
-            select(Rule).where(
-                Rule.doc_type_id == document.doc_type_id,
+            select(Rule).join(
+                rule_doc_types, rule_doc_types.c.rule_id == Rule.id
+            ).where(
+                rule_doc_types.c.doc_type_id == document.doc_type_id,
                 Rule.is_active == True,
                 Rule.is_deprecated == False,
             )

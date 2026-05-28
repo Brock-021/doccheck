@@ -1,13 +1,20 @@
-"""
-DocCheck 数据库模型
-"""
+"""DocCheck 数据库模型"""
 
 from datetime import datetime
 from sqlalchemy import (
-    Column, Integer, String, Text, Boolean, Float, DateTime, ForeignKey, JSON
+    Column, Integer, String, Text, Boolean, Float, DateTime, ForeignKey, JSON, Table
 )
 from sqlalchemy.orm import relationship
 from database import Base
+
+
+# ── 多对多关联表：规则 ↔ 文档类型 ─────────────────────────
+rule_doc_types = Table(
+    "rule_doc_types",
+    Base.metadata,
+    Column("rule_id", Integer, ForeignKey("rules.id"), primary_key=True),
+    Column("doc_type_id", Integer, ForeignKey("doc_types.id"), primary_key=True),
+)
 
 
 class User(Base):
@@ -33,14 +40,13 @@ class DocType(Base):
     name = Column(String(128), unique=True, nullable=False)
     sort_order = Column(Integer, default=0, nullable=False)
 
-    rules = relationship("Rule", back_populates="doc_type")
+    rules = relationship("Rule", secondary=rule_doc_types, back_populates="doc_types")
 
 
 class Rule(Base):
     __tablename__ = "rules"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    doc_type_id = Column(Integer, ForeignKey("doc_types.id"), nullable=False)
     name = Column(String(256), nullable=False)
     description = Column(Text, nullable=False, default="")
     severity = Column(String(32), nullable=False, default="must_fix")
@@ -52,7 +58,7 @@ class Rule(Base):
     is_deprecated = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
 
-    doc_type = relationship("DocType", back_populates="rules")
+    doc_types = relationship("DocType", secondary=rule_doc_types, back_populates="rules")
     check_results = relationship("CheckResult", back_populates="rule")
 
 

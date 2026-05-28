@@ -10,7 +10,7 @@ from sqlalchemy import select, func, distinct, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import Document, CheckTask, CheckResult, Report, Rule, DocType, User
+from models import Document, CheckTask, CheckResult, Report, Rule, DocType, User, rule_doc_types
 
 router = APIRouter(prefix="/api/admin", tags=["statistics"])
 
@@ -89,7 +89,8 @@ async def get_statistics(
             func.count(CheckTask.id).label("check_count"),
         )
         .select_from(DocType)
-        .outerjoin(Rule, Rule.doc_type_id == DocType.id)
+        .outerjoin(rule_doc_types, rule_doc_types.c.doc_type_id == DocType.id)
+        .outerjoin(Rule, Rule.id == rule_doc_types.c.rule_id)
         .outerjoin(Document, Document.doc_type_id == DocType.id)
         .outerjoin(CheckTask, CheckTask.document_id == Document.id)
         .group_by(DocType.id, DocType.name)

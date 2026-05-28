@@ -6,7 +6,7 @@ from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from models import DocType, Rule, CheckResult
+from models import DocType, Rule, CheckResult, rule_doc_types
 from schemas import (
     DocTypeCreate, DocTypeUpdate, DocTypeResponse,
     RuleCreate, RuleUpdate, RuleResponse, BatchToggleRequest,
@@ -14,6 +14,43 @@ from schemas import (
 from services.audit import log_action
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+# ── 辅助函数 ──────────────────────────────────────────────
+
+async def _build_rule_response(db: AsyncSession, rule: Rule) -> RuleResponse:
+    """从 Rule 对象构建 RuleResponse，填充多对多关联的文档类型信息。"""
+    dt_ids_result = await db.execute(
+        select(rule_doc_types.c.doc_type_id).where(
+            rule_doc_types.c.rule_id == rule.id
+        )
+    )
+    dt_ids = [row[0] for row in dt_ids_result.all()]
+    dt_names = []
+    for dt_id in dt_ids:
+        dt_result = await db.execute(select(DocType).where(DocType.id == dt_id))
+        dt = dt_result.scalar_one_or_none()
+        if dt:
+            dt_names.append(dt.name)
+    return RuleResponse(
+        id=rule.id, doc_type_ids=dt_ids,
+        doc_type_names=dt_names if dt_names else None,
+        name=rule.name, description=rule.description,
+        severity=rule.severity, stage=rule.stage,
+        sort_order=rule.sort_order, is_active=rule.is_active,
+        is_deprecated=rule.is_deprecated, created_at=rule.created_at,
+    )
+
+
+async def _sync_rule_doc_types(db: AsyncSession, rule_id: int, doc_type_ids: list[int]):
+    """同步规则关联的文档类型（先删后插）。"""
+    await db.execute(
+        delete(rule_doc_types).where(rule_doc_types.c.rule_id == rule_id)
+    )
+    for dt_id in doc_type_ids:
+        await db.execute(
+            rule_doc_types.insert().values(rule_id=rule_id, doc_type_id=dt_id)
+        )
 
 
 # ═══════════════════════════════════════════════════════════
@@ -27,13 +64,12 @@ async def list_doc_types(db: AsyncSession = Depends(get_db)):
         select(DocType).order_by(DocType.sort_order)
     )
     types = result.scalars().all()
-    # Attach rule count
+    # Attach rule count via association table
     resp = []
     for t in types:
         count_result = await db.execute(
-            select(func.count(Rule.id)).where(
-                Rule.doc_type_id == t.id,
-                Rule.is_deprecated == False,
+            select(func.count(rule_doc_types.c.rule_id)).where(
+                rule_doc_types.c.doc_type_id == t.id,
             )
         )
         rule_count = count_result.scalar() or 0
@@ -92,8 +128,8 @@ async def update_doc_type(
     await db.refresh(doc_type)
 
     count_result = await db.execute(
-        select(func.count(Rule.id)).where(
-            Rule.doc_type_id == type_id, Rule.is_deprecated == False,
+        select(func.count(rule_doc_types.c.rule_id)).where(
+            rule_doc_types.c.doc_type_id == type_id,
         )
     )
     return DocTypeResponse(id=doc_type.id, name=doc_type.name,
@@ -109,10 +145,10 @@ async def delete_doc_type(type_id: int, db: AsyncSession = Depends(get_db)):
     if not doc_type:
         raise HTTPException(status_code=404, detail="文档类型不存在")
 
-    # Check rules
+    # Check rules via association table
     count_result = await db.execute(
-        select(func.count(Rule.id)).where(
-            Rule.doc_type_id == type_id, Rule.is_deprecated == False,
+        select(func.count(rule_doc_types.c.rule_id)).where(
+            rule_doc_types.c.doc_type_id == type_id,
         )
     )
     if count_result.scalar() > 0:
@@ -142,7 +178,11 @@ async def list_rules(
     query = select(Rule).where(Rule.is_deprecated == False).order_by(Rule.sort_order)
 
     if doc_type_id:
-        query = query.where(Rule.doc_type_id == doc_type_id)
+        # Filter by association table
+        query = query.join(rule_doc_types).where(
+            rule_doc_types.c.doc_type_id == doc_type_id,
+            rule_doc_types.c.rule_id == Rule.id,
+        )
     if stage:
         query = query.where(Rule.stage.in_([stage, "all"]))
 
@@ -155,29 +195,22 @@ async def list_rules(
 
     resp = []
     for r in rules:
-        dt_result = await db.execute(select(DocType).where(DocType.id == r.doc_type_id))
-        dt = dt_result.scalar_one_or_none()
-        resp.append(RuleResponse(
-            id=r.id, doc_type_id=r.doc_type_id,
-            doc_type_name=dt.name if dt else None,
-            name=r.name, description=r.description,
-            severity=r.severity, stage=r.stage,
-            sort_order=r.sort_order, is_active=r.is_active,
-            is_deprecated=r.is_deprecated, created_at=r.created_at,
-        ))
+        resp.append(await _build_rule_response(db, r))
     return resp
 
 
 @router.post("/rules", response_model=RuleResponse)
 async def create_rule(data: RuleCreate, db: AsyncSession = Depends(get_db)):
     """新增规则。"""
-    # Verify doc type exists
-    dt_result = await db.execute(select(DocType).where(DocType.id == data.doc_type_id))
-    if not dt_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="文档类型不存在")
+    # Verify all doc types exist
+    if not data.doc_type_ids:
+        raise HTTPException(status_code=422, detail="至少选择一个文档类型")
+    for dt_id in data.doc_type_ids:
+        dt_result = await db.execute(select(DocType).where(DocType.id == dt_id))
+        if not dt_result.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail=f"文档类型 {dt_id} 不存在")
 
     rule = Rule(
-        doc_type_id=data.doc_type_id,
         name=data.name,
         description=data.description,
         severity=data.severity,
@@ -186,19 +219,17 @@ async def create_rule(data: RuleCreate, db: AsyncSession = Depends(get_db)):
         is_active=data.is_active,
     )
     db.add(rule)
+    await db.flush()
+
+    # Insert association records
+    for dt_id in data.doc_type_ids:
+        await db.execute(
+            rule_doc_types.insert().values(rule_id=rule.id, doc_type_id=dt_id)
+        )
     await db.commit()
     await db.refresh(rule)
 
-    dt_result = await db.execute(select(DocType).where(DocType.id == rule.doc_type_id))
-    dt = dt_result.scalar_one_or_none()
-    return RuleResponse(
-        id=rule.id, doc_type_id=rule.doc_type_id,
-        doc_type_name=dt.name if dt else None,
-        name=rule.name, description=rule.description,
-        severity=rule.severity, stage=rule.stage,
-        sort_order=rule.sort_order, is_active=rule.is_active,
-        is_deprecated=rule.is_deprecated, created_at=rule.created_at,
-    )
+    return await _build_rule_response(db, rule)
 
 
 @router.put("/rules/{rule_id}", response_model=RuleResponse)
@@ -221,22 +252,15 @@ async def update_rule(rule_id: int, data: RuleUpdate, db: AsyncSession = Depends
         rule.sort_order = data.sort_order
     if data.is_active is not None:
         rule.is_active = data.is_active
-    if data.doc_type_id is not None:
-        rule.doc_type_id = data.doc_type_id
+    if data.doc_type_ids is not None:
+        if not data.doc_type_ids:
+            raise HTTPException(status_code=422, detail="至少选择一个文档类型")
+        await _sync_rule_doc_types(db, rule.id, data.doc_type_ids)
 
     await db.commit()
     await db.refresh(rule)
 
-    dt_result = await db.execute(select(DocType).where(DocType.id == rule.doc_type_id))
-    dt = dt_result.scalar_one_or_none()
-    return RuleResponse(
-        id=rule.id, doc_type_id=rule.doc_type_id,
-        doc_type_name=dt.name if dt else None,
-        name=rule.name, description=rule.description,
-        severity=rule.severity, stage=rule.stage,
-        sort_order=rule.sort_order, is_active=rule.is_active,
-        is_deprecated=rule.is_deprecated, created_at=rule.created_at,
-    )
+    return await _build_rule_response(db, rule)
 
 
 @router.delete("/rules/{rule_id}")
@@ -257,6 +281,10 @@ async def delete_rule(rule_id: int, db: AsyncSession = Depends(get_db)):
         await db.commit()
         return {"message": "规则已被检查任务引用，已标记为废弃", "deprecated": True}
 
+    # Remove association records first
+    await db.execute(
+        delete(rule_doc_types).where(rule_doc_types.c.rule_id == rule_id)
+    )
     await db.delete(rule)
     await db.commit()
     return {"message": "删除成功", "deprecated": False}
@@ -274,28 +302,26 @@ async def toggle_rule(rule_id: int, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(rule)
 
-    dt_result = await db.execute(select(DocType).where(DocType.id == rule.doc_type_id))
-    dt = dt_result.scalar_one_or_none()
-    return RuleResponse(
-        id=rule.id, doc_type_id=rule.doc_type_id,
-        doc_type_name=dt.name if dt else None,
-        name=rule.name, description=rule.description,
-        severity=rule.severity, stage=rule.stage,
-        sort_order=rule.sort_order, is_active=rule.is_active,
-        is_deprecated=rule.is_deprecated, created_at=rule.created_at,
-    )
+    return await _build_rule_response(db, rule)
 
 
 @router.post("/rules/{rule_id}/copy", response_model=RuleResponse)
 async def copy_rule(rule_id: int, db: AsyncSession = Depends(get_db)):
-    """复制规则。"""
+    """复制规则（连带关联的文档类型）。"""
     result = await db.execute(select(Rule).where(Rule.id == rule_id))
     rule = result.scalar_one_or_none()
     if not rule:
         raise HTTPException(status_code=404, detail="规则不存在")
 
+    # Get associated doc types
+    dt_ids_result = await db.execute(
+        select(rule_doc_types.c.doc_type_id).where(
+            rule_doc_types.c.rule_id == rule.id
+        )
+    )
+    dt_ids = [row[0] for row in dt_ids_result.all()]
+
     new_rule = Rule(
-        doc_type_id=rule.doc_type_id,
         name=f"{rule.name}(副本)",
         description=rule.description,
         severity=rule.severity,
@@ -304,19 +330,17 @@ async def copy_rule(rule_id: int, db: AsyncSession = Depends(get_db)):
         is_active=False,
     )
     db.add(new_rule)
+    await db.flush()
+
+    # Copy association records
+    for dt_id in dt_ids:
+        await db.execute(
+            rule_doc_types.insert().values(rule_id=new_rule.id, doc_type_id=dt_id)
+        )
     await db.commit()
     await db.refresh(new_rule)
 
-    dt_result = await db.execute(select(DocType).where(DocType.id == new_rule.doc_type_id))
-    dt = dt_result.scalar_one_or_none()
-    return RuleResponse(
-        id=new_rule.id, doc_type_id=new_rule.doc_type_id,
-        doc_type_name=dt.name if dt else None,
-        name=new_rule.name, description=new_rule.description,
-        severity=new_rule.severity, stage=new_rule.stage,
-        sort_order=new_rule.sort_order, is_active=new_rule.is_active,
-        is_deprecated=new_rule.is_deprecated, created_at=new_rule.created_at,
-    )
+    return await _build_rule_response(db, new_rule)
 
 
 @router.patch("/rules/batch-toggle")
